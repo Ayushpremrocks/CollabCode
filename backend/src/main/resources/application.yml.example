@@ -1,0 +1,29 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/collabeditor
+    username: postgres
+    password: Ayush123#
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+app:
+  jwt:
+    secret: NctPtKzPaj2/XVGtKikBJZpPgzOP0qTekSglQVpxfsQ=
+    expiration-ms: 86400000  # 24 hours
+
+  cors:
+    allowed-origins: http://localhost:5173
