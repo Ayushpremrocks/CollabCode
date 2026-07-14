@@ -1,66 +1,58 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { authService } from '../services/authService';
-import type { AuthResponse, LoginRequest, RegisterRequest } from '../types';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
+import {
+  useAuth as useClerkAuth,
+  useUser,
+  useClerk,
+} from '@clerk/clerk-react';
+import { setClerkTokenGetter } from '../services/api';
 
+// Keep the same interface shape so all consumers (Navbar, EditorPage, DashboardPage,
+// ProtectedRoute, WebSocketContext, useCollaboration) require ZERO changes.
 interface AuthContextType {
   user: { userId: number; username: string; email: string } | null;
   isAuthenticated: boolean;
   loading: boolean;
-  login: (data: LoginRequest) => Promise<void>;
-  register: (data: RegisterRequest) => Promise<void>;
+  /** No-op — sign-in is handled by the Clerk <SignIn /> component on /login */
+  login: (data: unknown) => Promise<void>;
+  /** No-op — sign-up is handled by the Clerk <SignUp /> component on /register */
+  register: (data: unknown) => Promise<void>;
   logout: () => void;
+  /** Returns a fresh Clerk session token (async — may hit Clerk's API on expiry) */
+  getToken: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<{ userId: number; username: string; email: string } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { isSignedIn, isLoaded, getToken } = useClerkAuth();
+  const { user: clerkUser } = useUser();
+  const { signOut } = useClerk();
 
+  // Register the token getter with the Axios instance so all HTTP requests get
+  // a fresh Bearer token without any manual effort in each service file.
   useEffect(() => {
-    // Restore session from localStorage
-    const savedUser = authService.getUser();
-    const token = authService.getToken();
-    if (savedUser && token) {
-      setUser(savedUser);
-    }
-    setLoading(false);
-  }, []);
+    setClerkTokenGetter(() => getToken());
+  }, [getToken]);
 
-  const login = useCallback(async (data: LoginRequest) => {
-    const response: AuthResponse = await authService.login(data);
-    authService.saveAuth(response);
-    setUser({
-      userId: response.userId,
-      username: response.username,
-      email: response.email,
-    });
-  }, []);
-
-  const register = useCallback(async (data: RegisterRequest) => {
-    const response: AuthResponse = await authService.register(data);
-    authService.saveAuth(response);
-    setUser({
-      userId: response.userId,
-      username: response.username,
-      email: response.email,
-    });
-  }, []);
-
-  const logout = useCallback(() => {
-    authService.logout();
-    setUser(null);
-  }, []);
+  // Map Clerk user to the shape the rest of the app expects
+  const user = clerkUser
+    ? {
+        userId: 0, // Clerk has no numeric ID; backend assigns one via auto-provisioning
+        username: clerkUser.primaryEmailAddress?.emailAddress?.split('@')[0] || 'User',
+        email: clerkUser.primaryEmailAddress?.emailAddress || '',
+      }
+    : null;
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        isAuthenticated: !!user,
-        loading,
-        login,
-        register,
-        logout,
+        isAuthenticated: isSignedIn ?? false,
+        loading: !isLoaded,
+        login: async () => {}, // Sign-in is handled by Clerk UI at /login
+        register: async () => {}, // Sign-up is handled by Clerk UI at /register
+        logout: () => signOut(),
+        getToken: () => getToken(),
       }}
     >
       {children}

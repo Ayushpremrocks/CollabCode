@@ -4,11 +4,12 @@ import com.collabcode.dto.*;
 import com.collabcode.service.CodeExecutionService;
 import com.collabcode.service.DocumentService;
 import com.collabcode.service.RoomService;
+import com.collabcode.service.UserProvisioningService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Base64;
@@ -23,30 +24,39 @@ public class RoomController {
     private final DocumentService documentService;
     private final CodeExecutionService codeExecutionService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final UserProvisioningService userProvisioningService;
 
     public RoomController(RoomService roomService,
                           DocumentService documentService,
                           CodeExecutionService codeExecutionService,
-                          SimpMessagingTemplate messagingTemplate) {
+                          SimpMessagingTemplate messagingTemplate,
+                          UserProvisioningService userProvisioningService) {
         this.roomService = roomService;
         this.documentService = documentService;
         this.codeExecutionService = codeExecutionService;
         this.messagingTemplate = messagingTemplate;
+        this.userProvisioningService = userProvisioningService;
     }
 
     @PostMapping
     public ResponseEntity<RoomResponse> createRoom(
             @Valid @RequestBody CreateRoomRequest request,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        RoomResponse room = roomService.createRoom(request, userDetails.getUsername());
+            @AuthenticationPrincipal Jwt jwt) {
+        RoomResponse room = roomService.createRoom(request,
+                jwt.getSubject(),
+                jwt.getClaimAsString("username"),
+                jwt.getClaimAsString("email"));
         return ResponseEntity.ok(room);
     }
 
     @PostMapping("/join")
     public ResponseEntity<RoomResponse> joinRoom(
             @Valid @RequestBody JoinRoomRequest request,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        RoomResponse room = roomService.joinRoom(request.getRoomCode(), userDetails.getUsername());
+            @AuthenticationPrincipal Jwt jwt) {
+        RoomResponse room = roomService.joinRoom(request.getRoomCode(),
+                jwt.getSubject(),
+                jwt.getClaimAsString("username"),
+                jwt.getClaimAsString("email"));
         return ResponseEntity.ok(room);
     }
 
@@ -58,8 +68,11 @@ public class RoomController {
 
     @GetMapping
     public ResponseEntity<List<RoomResponse>> getUserRooms(
-            @AuthenticationPrincipal UserDetails userDetails) {
-        List<RoomResponse> rooms = roomService.getUserRooms(userDetails.getUsername());
+            @AuthenticationPrincipal Jwt jwt) {
+        List<RoomResponse> rooms = roomService.getUserRooms(
+                jwt.getSubject(),
+                jwt.getClaimAsString("username"),
+                jwt.getClaimAsString("email"));
         return ResponseEntity.ok(rooms);
     }
 
@@ -69,13 +82,22 @@ public class RoomController {
     @DeleteMapping("/{roomCode}")
     public ResponseEntity<Void> deleteRoom(
             @PathVariable String roomCode,
-            @AuthenticationPrincipal UserDetails userDetails) {
+            @AuthenticationPrincipal Jwt jwt) {
+        String clerkUserId = jwt.getSubject();
+        String username = jwt.getClaimAsString("username");
+        String email = jwt.getClaimAsString("email");
+
+        // Resolve local username for the STOMP notification payload
+        String localUsername = userProvisioningService
+                .getOrCreateUser(clerkUserId, username, email)
+                .getUsername();
+
         // Notify users before deletion
         messagingTemplate.convertAndSend(
                 "/topic/room/" + roomCode + "/room-deleted",
-                Map.of("roomCode", roomCode, "deletedBy", userDetails.getUsername())
+                Map.of("roomCode", roomCode, "deletedBy", localUsername)
         );
-        roomService.deleteRoom(roomCode, userDetails.getUsername());
+        roomService.deleteRoom(roomCode, clerkUserId, username, email);
         return ResponseEntity.noContent().build();
     }
 
@@ -115,8 +137,15 @@ public class RoomController {
     public ResponseEntity<Void> restoreSnapshot(
             @PathVariable String roomCode,
             @PathVariable Long snapshotId,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        if (!roomService.isOwner(roomCode, userDetails.getUsername())) {
+            @AuthenticationPrincipal Jwt jwt) {
+        // Resolve local username to check ownership (isOwner uses local username)
+        String localUsername = userProvisioningService
+                .getOrCreateUser(
+                        jwt.getSubject(),
+                        jwt.getClaimAsString("username"),
+                        jwt.getClaimAsString("email"))
+                .getUsername();
+        if (!roomService.isOwner(roomCode, localUsername)) {
             return ResponseEntity.status(403).build();
         }
         documentService.restoreSnapshot(roomCode, snapshotId);
@@ -124,7 +153,7 @@ public class RoomController {
     }
 
     /**
-     * Feature 5: Execute code via Judge0
+     * Feature 5: Execute code via Wandbox
      */
     @PostMapping("/execute")
     public ResponseEntity<ExecuteCodeResponse> executeCode(

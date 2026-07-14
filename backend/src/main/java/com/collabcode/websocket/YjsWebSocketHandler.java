@@ -2,10 +2,10 @@ package com.collabcode.websocket;
 
 import com.collabcode.model.DocumentSnapshot;
 import com.collabcode.model.User;
-import com.collabcode.repository.UserRepository;
-import com.collabcode.security.JwtUtil;
+import com.collabcode.security.ClerkJwtValidator;
 import com.collabcode.service.DocumentService;
 import com.collabcode.service.PresenceService;
+import com.collabcode.service.UserProvisioningService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -48,17 +48,17 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
 
     private final DocumentService documentService;
     private final PresenceService presenceService;
-    private final JwtUtil jwtUtil;
-    private final UserRepository userRepository;
+    private final ClerkJwtValidator clerkJwtValidator;
+    private final UserProvisioningService userProvisioningService;
 
     public YjsWebSocketHandler(DocumentService documentService,
                                 PresenceService presenceService,
-                                JwtUtil jwtUtil,
-                                UserRepository userRepository) {
+                                ClerkJwtValidator clerkJwtValidator,
+                                UserProvisioningService userProvisioningService) {
         this.documentService = documentService;
         this.presenceService = presenceService;
-        this.jwtUtil = jwtUtil;
-        this.userRepository = userRepository;
+        this.clerkJwtValidator = clerkJwtValidator;
+        this.userProvisioningService = userProvisioningService;
     }
 
     @Override
@@ -66,19 +66,27 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
         String roomCode = extractRoomCode(session);
         String token = extractToken(session);
 
-        if (token == null || !jwtUtil.validateToken(token)) {
-            log.warn("Invalid or missing JWT for WebSocket connection");
+        if (token == null) {
+            log.warn("Missing token for WebSocket connection");
             session.close(CloseStatus.POLICY_VIOLATION);
             return;
         }
 
-        String username = jwtUtil.extractUsername(token);
-        User user = userRepository.findByUsername(username).orElse(null);
-        if (user == null) {
-            log.warn("User not found for token: {}", username);
+        org.springframework.security.oauth2.jwt.Jwt jwt;
+        try {
+            jwt = clerkJwtValidator.decode(token);
+        } catch (Exception e) {
+            log.warn("Invalid Clerk JWT for WebSocket connection: {}", e.getMessage());
             session.close(CloseStatus.POLICY_VIOLATION);
             return;
         }
+
+        String clerkUserId = jwt.getSubject();
+        String claimUsername = jwt.getClaimAsString("username");
+        String email = jwt.getClaimAsString("email");
+
+        User user = userProvisioningService.getOrCreateUser(clerkUserId, claimUsername, email);
+        String username = user.getUsername();
 
         if (roomCode == null) {
             log.warn("No room code in WebSocket URL");

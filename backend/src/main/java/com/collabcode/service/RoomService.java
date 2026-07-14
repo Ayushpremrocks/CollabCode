@@ -24,6 +24,7 @@ public class RoomService {
     private final RoomParticipantRepository participantRepository;
     private final UserRepository userRepository;
     private final DocumentService documentService;
+    private final UserProvisioningService userProvisioningService;
 
     private static final String CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     private static final int CODE_LENGTH = 8;
@@ -32,17 +33,18 @@ public class RoomService {
     public RoomService(RoomRepository roomRepository,
                        RoomParticipantRepository participantRepository,
                        UserRepository userRepository,
-                       @Lazy DocumentService documentService) {
+                       @Lazy DocumentService documentService,
+                       UserProvisioningService userProvisioningService) {
         this.roomRepository = roomRepository;
         this.participantRepository = participantRepository;
         this.userRepository = userRepository;
         this.documentService = documentService;
+        this.userProvisioningService = userProvisioningService;
     }
 
     @Transactional
-    public RoomResponse createRoom(CreateRoomRequest request, String username) {
-        User owner = userRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+    public RoomResponse createRoom(CreateRoomRequest request, String clerkUserId, String username, String email) {
+        User owner = userProvisioningService.getOrCreateUser(clerkUserId, username, email);
 
         String roomCode = generateUniqueCode();
 
@@ -65,9 +67,8 @@ public class RoomService {
     }
 
     @Transactional
-    public RoomResponse joinRoom(String roomCode, String username) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+    public RoomResponse joinRoom(String roomCode, String clerkUserId, String username, String email) {
+        User user = userProvisioningService.getOrCreateUser(clerkUserId, username, email);
 
         Room room = roomRepository.findByRoomCode(roomCode)
                 .orElseThrow(() -> new IllegalArgumentException("Room not found"));
@@ -94,9 +95,8 @@ public class RoomService {
         return toRoomResponse(room);
     }
 
-    public List<RoomResponse> getUserRooms(String username) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+    public List<RoomResponse> getUserRooms(String clerkUserId, String username, String email) {
+        User user = userProvisioningService.getOrCreateUser(clerkUserId, username, email);
 
         List<RoomParticipant> participations = participantRepository.findByUserId(user.getId());
 
@@ -109,6 +109,7 @@ public class RoomService {
         Room room = roomRepository.findByRoomCode(roomCode).orElse(null);
         if (room == null) return false;
 
+        // Look up by local username (set by STOMP interceptor / WS handler)
         User user = userRepository.findByUsername(username).orElse(null);
         if (user == null) return false;
 
@@ -120,9 +121,8 @@ public class RoomService {
      * Returns the room name for notification purposes.
      */
     @Transactional
-    public String deleteRoom(String roomCode, String username) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+    public String deleteRoom(String roomCode, String clerkUserId, String username, String email) {
+        User user = userProvisioningService.getOrCreateUser(clerkUserId, username, email);
 
         Room room = roomRepository.findByRoomCode(roomCode)
                 .orElseThrow(() -> new IllegalArgumentException("Room not found"));

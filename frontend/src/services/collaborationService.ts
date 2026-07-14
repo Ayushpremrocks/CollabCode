@@ -1,5 +1,4 @@
 import * as Y from 'yjs';
-import { authService } from './authService';
 
 const WS_BASE_URL = 'ws://localhost:8080/ws/yjs';
 
@@ -21,9 +20,12 @@ export class CollaborationProvider {
   private snapshotInterval: ReturnType<typeof setInterval> | null = null;
   private connectionListeners: Set<(connected: boolean) => void> = new Set();
 
-  constructor(roomCode: string, doc: Y.Doc) {
+  private tokenGetter: () => Promise<string | null>;
+
+  constructor(roomCode: string, doc: Y.Doc, tokenGetter: () => Promise<string | null>) {
     this.roomCode = roomCode;
     this.doc = doc;
+    this.tokenGetter = tokenGetter;
 
     // Listen for local document updates and broadcast
     this.doc.on('update', this.handleDocUpdate);
@@ -31,12 +33,12 @@ export class CollaborationProvider {
     this.connect();
   }
 
-  private connect() {
+  private async connect() {
     if (this.destroyed) return;
 
-    const token = authService.getToken();
+    const token = await this.tokenGetter();
     if (!token) {
-      console.error('No auth token available for WebSocket connection');
+      console.error('No Clerk session token available for WebSocket connection');
       return;
     }
 

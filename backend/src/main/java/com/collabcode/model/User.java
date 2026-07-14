@@ -23,7 +23,10 @@ public class User {
     @Column(unique = true, nullable = false, length = 100)
     private String email;
 
-    @Column(name = "password_hash", nullable = false)
+    @Column(name = "clerk_user_id", unique = true, length = 255)
+    private String clerkUserId;
+
+    @Column(name = "password_hash")
     private String passwordHash;
 
     @Column(name = "created_at")

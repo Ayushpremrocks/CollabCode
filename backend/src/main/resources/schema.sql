@@ -45,6 +45,11 @@ ALTER TABLE document_snapshots ADD COLUMN IF NOT EXISTS snapshot_label VARCHAR(1
 ALTER TABLE document_snapshots ALTER COLUMN language TYPE VARCHAR(30);
 ALTER TABLE document_snapshots DROP CONSTRAINT IF EXISTS document_snapshots_room_id_key;
 
+-- Clerk auth migration: add clerk_user_id, relax password_hash constraint
+ALTER TABLE users ADD COLUMN IF NOT EXISTS clerk_user_id VARCHAR(255);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_clerk_user_id ON users(clerk_user_id);
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_rooms_room_code ON rooms(room_code);
 CREATE INDEX IF NOT EXISTS idx_rooms_owner_id ON rooms(owner_id);

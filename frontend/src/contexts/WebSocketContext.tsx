@@ -1,6 +1,5 @@
 import { createContext, useContext, useRef, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { Client } from '@stomp/stompjs';
-import { authService } from '../services/authService';
 import { useAuth } from './AuthContext';
 
 interface WebSocketContextType {
@@ -14,7 +13,7 @@ const WebSocketContext = createContext<WebSocketContextType | undefined>(undefin
 export function WebSocketProvider({ children }: { children: ReactNode }) {
   const clientRef = useRef<Client | null>(null);
   const [connected, setConnected] = useState(false);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, getToken } = useAuth();
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -26,39 +25,49 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const token = authService.getToken();
-    if (!token) return;
+    // Clerk's getToken() is async — set up STOMP after we have a fresh token
+    const setupStomp = async () => {
+      const token = await getToken();
+      if (!token) {
+        console.warn('[STOMP] No Clerk session token — skipping STOMP connection');
+        return;
+      }
 
-    const client = new Client({
-      brokerURL: 'ws://localhost:8080/ws/stomp',
-      connectHeaders: {
-        Authorization: `Bearer ${token}`,
-      },
-      reconnectDelay: 5000,
-      heartbeatIncoming: 10000,
-      heartbeatOutgoing: 10000,
-      onConnect: () => {
-        console.log('[STOMP] Connected');
-        setConnected(true);
-      },
-      onDisconnect: () => {
-        console.log('[STOMP] Disconnected');
-        setConnected(false);
-      },
-      onStompError: (frame) => {
-        console.error('[STOMP] Error:', frame.headers.message);
-      },
-    });
+      const client = new Client({
+        brokerURL: 'ws://localhost:8080/ws/stomp',
+        connectHeaders: {
+          Authorization: `Bearer ${token}`,
+        },
+        reconnectDelay: 5000,
+        heartbeatIncoming: 10000,
+        heartbeatOutgoing: 10000,
+        onConnect: () => {
+          console.log('[STOMP] Connected');
+          setConnected(true);
+        },
+        onDisconnect: () => {
+          console.log('[STOMP] Disconnected');
+          setConnected(false);
+        },
+        onStompError: (frame) => {
+          console.error('[STOMP] Error:', frame.headers.message);
+        },
+      });
 
-    client.activate();
-    clientRef.current = client;
+      client.activate();
+      clientRef.current = client;
+    };
+
+    setupStomp();
 
     return () => {
-      client.deactivate();
-      clientRef.current = null;
-      setConnected(false);
+      if (clientRef.current) {
+        clientRef.current.deactivate();
+        clientRef.current = null;
+        setConnected(false);
+      }
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, getToken]);
 
   const publish = useCallback((destination: string, body: unknown) => {
     if (clientRef.current?.connected) {

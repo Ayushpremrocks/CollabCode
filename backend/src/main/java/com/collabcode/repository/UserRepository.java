@@ -12,7 +12,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 
+    /**
+     * Looks up a user by their Clerk user ID (the {@code sub} claim in Clerk JWTs).
+     * Used by UserProvisioningService, YjsWebSocketHandler, and StompAuthChannelInterceptor.
+     */
+    Optional<User> findByClerkUserId(String clerkUserId);
+
     boolean existsByUsername(String username);
 
     boolean existsByEmail(String email);
+
+    boolean existsByClerkUserId(String clerkUserId);
 }

@@ -7,8 +7,8 @@ export function Navbar() {
   const { theme, toggleTheme, isDark } = useTheme();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 
