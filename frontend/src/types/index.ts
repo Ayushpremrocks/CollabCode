@@ -28,10 +28,17 @@ export interface Room {
   name: string;
   ownerUsername: string;
   ownerId: number;
+  ownerClerkId?: string;
   createdAt: string;
   expiresAt: string | null;
   participants: string[];
   language: SupportedLanguage;
+  locked: boolean;
+}
+
+export interface LockToggleEvent {
+  locked: boolean;
+  toggledBy: string;
 }
 
 export interface CreateRoomRequest {

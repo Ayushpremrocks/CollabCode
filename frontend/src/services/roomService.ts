@@ -27,6 +27,12 @@ export const roomService = {
     await api.delete(`/rooms/${roomCode}`);
   },
 
+  /** Lock/Unlock a room (host only) */
+  async toggleLock(roomCode: string, locked: boolean): Promise<{ locked: boolean }> {
+    const response = await api.patch<{ locked: boolean }>(`/rooms/${roomCode}/lock`, { locked });
+    return response.data;
+  },
+
   /** Feature 8: Get snapshot history */
   async getSnapshots(roomCode: string): Promise<SnapshotInfo[]> {
     const response = await api.get<SnapshotInfo[]>(`/rooms/${roomCode}/snapshots`);

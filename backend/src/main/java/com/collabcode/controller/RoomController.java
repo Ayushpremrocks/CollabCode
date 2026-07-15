@@ -101,6 +101,32 @@ public class RoomController {
         return ResponseEntity.noContent().build();
     }
 
+    @PatchMapping("/{roomCode}/lock")
+    public ResponseEntity<Map<String, Boolean>> toggleLock(
+            @PathVariable String roomCode,
+            @RequestBody Map<String, Boolean> request,
+            @AuthenticationPrincipal Jwt jwt) {
+        String clerkUserId = jwt.getSubject();
+        String username = jwt.getClaimAsString("username");
+        String email = jwt.getClaimAsString("email");
+
+        boolean locked = request.getOrDefault("locked", false);
+
+        boolean newLockState = roomService.toggleLock(roomCode, locked, clerkUserId, username, email);
+
+        // Resolve local username for STOMP broadcast
+        String localUsername = userProvisioningService
+                .getOrCreateUser(clerkUserId, username, email)
+                .getUsername();
+
+        messagingTemplate.convertAndSend(
+                "/topic/room/" + roomCode + "/lock",
+                Map.of("locked", newLockState, "toggledBy", localUsername)
+        );
+
+        return ResponseEntity.ok(Map.of("locked", newLockState));
+    }
+
     /**
      * Feature 8: Get snapshot history for a room
      */

@@ -6,45 +6,64 @@ const FEATURES = [
   {
     icon: '⚡',
     title: 'CRDT-Powered Sync',
-    desc: 'Yjs conflict-free replicated data types ensure your edits never conflict, even on poor connections.',
+    desc: 'Yjs conflict-free replicated data types ensure your edits never conflict, even on poor connections. Changes propagate in milliseconds.',
     color: 'from-indigo-500 to-purple-600',
   },
   {
-    icon: '👥',
-    title: 'Real-Time Presence',
-    desc: 'See exactly who is in the room, with per-user colored cursors and live gutter authorship.',
+    icon: '👤',
+    title: 'Presence with Avatars',
+    desc: 'See who\'s in the room with live profile pictures, display names, and per-user colored cursors with gutter authorship tracking.',
     color: 'from-emerald-500 to-teal-600',
   },
   {
-    icon: '💾',
-    title: 'Persistent Rooms',
-    desc: 'Documents auto-save every 30 seconds. History snapshots let you rewind to any saved state.',
-    color: 'from-amber-500 to-orange-600',
-  },
-  {
-    icon: '🌐',
-    title: '20 Languages',
-    desc: 'JavaScript, Python, Java, Rust, Go, C++, and 14 more — all with Monaco syntax highlighting.',
-    color: 'from-rose-500 to-pink-600',
+    icon: '🔐',
+    title: 'Google Sign-In',
+    desc: 'Secure, frictionless authentication via Clerk. Sign in with your Google account in one click — no passwords to manage.',
+    color: 'from-sky-500 to-blue-600',
   },
   {
     icon: '▶️',
     title: 'Code Execution',
-    desc: 'Run your code instantly with Judge0. See stdout, stderr, compile errors, and runtime stats.',
-    color: 'from-cyan-500 to-blue-600',
+    desc: 'Run code directly in the browser via Judge0. See stdout, stderr, compile errors, execution time, and memory usage instantly.',
+    color: 'from-cyan-500 to-indigo-600',
   },
   {
     icon: '💬',
     title: 'Live Chat',
-    desc: 'Built-in chat panel lets teammates communicate without leaving the editor.',
+    desc: 'Built-in chat panel with sender avatars and display names. Communicate with your team without ever leaving the editor.',
     color: 'from-violet-500 to-indigo-600',
+  },
+  {
+    icon: '🔒',
+    title: 'Host Controls',
+    desc: 'Room creators get powerful controls: lock the room to prevent new joins, toggle read-only mode for all guests, and delete rooms.',
+    color: 'from-amber-500 to-orange-600',
+  },
+  {
+    icon: '💾',
+    title: 'Snapshot History',
+    desc: 'Documents auto-save every 30 seconds. Hosts can browse the full revision history and restore any past snapshot.',
+    color: 'from-rose-500 to-pink-600',
+  },
+  {
+    icon: '🌐',
+    title: '20 Languages',
+    desc: 'JavaScript, TypeScript, Python, Java, Rust, Go, C++, C#, Kotlin, Swift, and 10 more — all with Monaco syntax highlighting.',
+    color: 'from-fuchsia-500 to-purple-600',
+  },
+  {
+    icon: '🔗',
+    title: 'Shareable Rooms',
+    desc: 'Instantly share an 8-character room code. Anyone with a link can join. Rooms persist for 48 hours with auto-renewal on activity.',
+    color: 'from-teal-500 to-emerald-600',
   },
 ];
 
 const TECH_STACK = [
   { name: 'React 18', color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' },
   { name: 'TypeScript', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
-  { name: 'Yjs CRDTs', color: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
+  { name: 'Clerk Auth', color: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
+  { name: 'Yjs CRDTs', color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' },
   { name: 'Monaco Editor', color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' },
   { name: 'Spring Boot', color: 'bg-green-500/10 text-green-400 border-green-500/20' },
   { name: 'PostgreSQL', color: 'bg-sky-500/10 text-sky-400 border-sky-500/20' },
@@ -52,26 +71,27 @@ const TECH_STACK = [
   { name: 'Judge0 API', color: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
 ];
 
-const CODE_DEMO = `// Real-time collaborative editing
-// Multiple users, zero conflicts
+const CODE_DEMO = `// CollabCode — real-time collaborative editor
+// Everyone types, everyone sees it instantly
 
-import { createDoc } from 'yjs';
-import { MonacoBinding } from 'y-monaco';
+async function joinRoom(roomCode: string) {
+  // Authenticate with Clerk (Google sign-in)
+  const token = await clerk.session?.getToken();
 
-const doc = createDoc();
-const yText = doc.getText('code');
+  // Connect the Yjs CRDT WebSocket
+  const provider = new CollaborationProvider(
+    roomCode, doc, () => token, userName
+  );
 
-// Bind to Monaco — CRDT magic ✨
-const binding = new MonacoBinding(
-  yText,
-  editor.getModel(),
-  new Set([editor])
-);
+  // Broadcast your presence via STOMP
+  stomp.publish('/app/room/' + roomCode + '/join');
+}
 
-// Everyone sees changes instantly
-yText.observe(() => {
-  console.log('Document updated!');
-});`;
+// Host controls — lock, unlock, delete
+const handleLock = () =>
+  roomService.toggleLock(roomCode, true);`;
+
+
 
 export function LandingPage() {
   const { isAuthenticated, loading } = useAuth();
@@ -130,7 +150,7 @@ export function LandingPage() {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-medium px-4 py-2 rounded-full mb-8">
             <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse" />
-            Real-time • CRDT-powered • Open Source
+            Real-time • CRDT-powered • Google Sign-In via Clerk
           </div>
 
           <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight mb-6 leading-none">
@@ -141,8 +161,8 @@ export function LandingPage() {
           </h1>
 
           <p className="text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-            CollabCode is a full-stack collaborative code editor powered by Yjs CRDTs.
-            Edit together, see presence, run code, and chat — all in one place.
+            CollabCode is a full-stack collaborative code editor powered by Yjs CRDTs and Clerk auth.
+            Sign in with Google, create a room, and code together — with live presence, avatars, chat, code execution, and host controls.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
@@ -181,18 +201,24 @@ export function LandingPage() {
               </div>
 
               {/* Users bar */}
-              <div className="flex items-center gap-2 px-5 py-2 bg-gray-800/30 border-b border-gray-700/30">
-                {['alice', 'bob', 'carol'].map((user, i) => {
-                  const colors = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500'];
-                  return (
-                    <div key={user} className="flex items-center gap-1.5">
-                      <div className={`w-5 h-5 rounded-full ${colors[i]} flex items-center justify-center text-white text-xs font-bold`}>
-                        {user[0].toUpperCase()}
-                      </div>
-                      <span className="text-xs text-gray-400">{user}</span>
+              <div className="flex items-center gap-3 px-5 py-2 bg-gray-800/30 border-b border-gray-700/30">
+                {[
+                  { name: 'Alice', color: 'from-indigo-500 to-purple-500', emoji: '👩‍💻' },
+                  { name: 'Bob', color: 'from-emerald-500 to-teal-500', emoji: '🧑‍💻' },
+                  { name: 'Carol', color: 'from-amber-500 to-orange-500', emoji: '👩‍🔬' },
+                ].map((u) => (
+                  <div key={u.name} className="flex items-center gap-1.5">
+                    <div className={`w-6 h-6 rounded-full bg-gradient-to-br ${u.color} flex items-center justify-center text-xs shadow-md`}>
+                      {u.emoji}
                     </div>
-                  );
-                })}
+                    <span className="text-xs text-gray-300 font-medium">{u.name}</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  </div>
+                ))}
+                <div className="ml-auto flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  <span className="text-xs text-amber-400 font-mono">Host</span>
+                </div>
               </div>
 
               {/* Code content */}
@@ -283,7 +309,7 @@ export function LandingPage() {
               </div>
               <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-center">
                 <div className="text-emerald-400 font-mono text-xs font-semibold">/ws/stomp</div>
-                <div className="text-gray-500 text-xs mt-1">Presence · Chat · Events</div>
+                <div className="text-gray-500 text-xs mt-1">Presence · Avatars · Chat · Lock Events</div>
               </div>
             </div>
 
@@ -323,14 +349,22 @@ export function LandingPage() {
               Ready to collaborate?
             </h2>
             <p className="text-gray-400 mb-8">
-              Create a room in seconds. No downloads. No installs.
+              Sign in with Google and create a room in seconds. No downloads. No installs. No passwords.
             </p>
-            <Link
-              to="/register"
-              className="inline-block bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold px-10 py-4 rounded-xl text-lg transition-all shadow-2xl shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:-translate-y-1"
-            >
-              Start Coding Together →
-            </Link>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Link
+                to="/register"
+                className="inline-block bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold px-10 py-4 rounded-xl text-lg transition-all shadow-2xl shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:-translate-y-1"
+              >
+                Get Started with Google →
+              </Link>
+              <Link
+                to="/login"
+                className="inline-block bg-gray-800/80 hover:bg-gray-700/80 text-gray-200 font-semibold px-8 py-4 rounded-xl text-lg transition-all border border-gray-700 hover:border-gray-600"
+              >
+                Sign In
+              </Link>
+            </div>
           </div>
         </div>
       </section>

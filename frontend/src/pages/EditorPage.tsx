@@ -58,6 +58,7 @@ export function EditorPage() {
 
   // Feature 6: Read-only mode
   const [isReadOnly, setIsReadOnly] = useState(false);
+  const [isRoomLocked, setIsRoomLocked] = useState(false);
 
   // Feature 5: Code execution
   const [showOutput, setShowOutput] = useState(false);
@@ -84,7 +85,11 @@ export function EditorPage() {
   const { yText, connected: yjsConnected } = useCollaboration(roomCode || '');
   const { activeUsers } = usePresence(roomCode || '');
 
-  const isHost = room?.ownerUsername === user?.username;
+  // Compare Clerk user IDs for reliable host detection.
+  // username-based comparison is fragile because the frontend derives it from
+  // emailAddress.split('@')[0], while the backend may store a different value
+  // from the JWT username claim. Clerk IDs are always canonical.
+  const isHost = !!(room?.ownerClerkId && clerkContext.user?.id && room.ownerClerkId === clerkContext.user.id);
 
   // Check for query param message (e.g. ?deleted=true from redirect)
   useEffect(() => {
@@ -101,6 +106,7 @@ export function EditorPage() {
       try {
         const roomData = await roomService.joinRoom({ roomCode });
         setRoom(roomData);
+        setIsRoomLocked(roomData.locked || false);
         applyRoomLanguage(roomData.language, 'room join (REST)', setLanguage);
       } catch (err: unknown) {
         const error = err as { response?: { data?: { error?: string } } };
@@ -147,6 +153,13 @@ export function EditorPage() {
           setIsReadOnly(!!data.readOnly);
         } catch {}
       }),
+      // Room lock toggle
+      stompClient.subscribe(`/topic/room/${roomCode}/lock`, (msg) => {
+        try {
+          const data = JSON.parse(msg.body);
+          setIsRoomLocked(!!data.locked);
+        } catch {}
+      }),
       // Feature 7: Chat messages
       stompClient.subscribe(`/topic/room/${roomCode}/chat`, (msg) => {
         try {
@@ -183,6 +196,31 @@ export function EditorPage() {
     setIsReadOnly(newReadOnly);
     publish(`/app/room/${roomCode}/readonly`, { readOnly: newReadOnly });
   }, [isReadOnly, roomCode, publish]);
+
+  // Room lock
+  const handleToggleRoomLock = useCallback(async () => {
+    if (!roomCode) return;
+    try {
+      const result = await roomService.toggleLock(roomCode, !isRoomLocked);
+      setIsRoomLocked(result.locked);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string }; status?: number } };
+      const msg = err.response?.data?.error || 'Failed to toggle room lock';
+      console.error('Failed to toggle lock:', msg);
+      alert(msg); // Surface the error so it\'s not silently swallowed
+    }
+  }, [roomCode, isRoomLocked]);
+
+  // Delete Room
+  const handleDeleteRoom = useCallback(async () => {
+    if (!roomCode) return;
+    try {
+      await roomService.deleteRoom(roomCode);
+      navigate('/dashboard?msg=deleted');
+    } catch (e) {
+      console.error('Failed to delete room', e);
+    }
+  }, [roomCode, navigate]);
 
   // Feature 5: Run code
   const handleRunCode = useCallback(async () => {
@@ -302,6 +340,18 @@ export function EditorPage() {
         </div>
       )}
 
+      {/* Room locked banner */}
+      {isRoomLocked && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center gap-2 shrink-0">
+          <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <span className="text-amber-400 text-xs font-medium">
+            🔒 This room is locked by the host. New users cannot join.
+          </span>
+        </div>
+      )}
+
       {/* Feature 2: Room deleted notification */}
       {deletedMessage && (
         <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-2 flex items-center justify-between shrink-0">
@@ -321,7 +371,7 @@ export function EditorPage() {
             <CollaborativeEditor
               yText={yText}
               language={activeLanguage}
-              readOnly={isReadOnly}
+              readOnly={isReadOnly || (isRoomLocked && !isHost)}
               isHost={isHost}
               fontSize={fontSize}
               theme={isDark ? 'vs-dark' : 'vs'}
@@ -349,10 +399,13 @@ export function EditorPage() {
             connected={yjsConnected}
             isHost={isHost}
             isReadOnly={isReadOnly}
+            isRoomLocked={isRoomLocked}
             fontSize={fontSize}
             onLanguageChange={handleLanguageChange}
             onLeaveRoom={handleLeaveRoom}
             onToggleReadOnly={handleToggleReadOnly}
+            onToggleRoomLock={handleToggleRoomLock}
+            onDeleteRoom={handleDeleteRoom}
             onRunCode={handleRunCode}
             onDownload={handleDownload}
             onShowHistory={() => setShowHistory(true)}

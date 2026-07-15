@@ -36,6 +36,10 @@ public class Room {
     @Column(name = "expires_at")
     private Instant expiresAt;
 
+    @Column(name = "is_locked")
+    @Builder.Default
+    private boolean isLocked = false;
+
     @PrePersist
     protected void onCreate() {
         this.createdAt = Instant.now();

@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS document_snapshots (
 -- Safe migrations for existing databases
 ALTER TABLE rooms ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
 ALTER TABLE rooms ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZONE DEFAULT (NOW() + INTERVAL '48 hours');
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS is_locked BOOLEAN DEFAULT FALSE;
 ALTER TABLE document_snapshots ADD COLUMN IF NOT EXISTS snapshot_label VARCHAR(100);
 ALTER TABLE document_snapshots ALTER COLUMN language TYPE VARCHAR(30);
 ALTER TABLE document_snapshots DROP CONSTRAINT IF EXISTS document_snapshots_room_id_key;

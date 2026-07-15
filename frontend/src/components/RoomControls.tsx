@@ -8,10 +8,13 @@ interface RoomControlsProps {
   connected: boolean;
   isHost: boolean;
   isReadOnly: boolean;
+  isRoomLocked?: boolean;
   fontSize: number;
   onLanguageChange: (language: SupportedLanguage) => void;
   onLeaveRoom: () => void;
   onToggleReadOnly: () => void;
+  onToggleRoomLock?: () => void;
+  onDeleteRoom?: () => void;
   onRunCode: () => void;
   onDownload: () => void;
   onShowHistory: () => void;
@@ -26,10 +29,13 @@ export function RoomControls({
   connected,
   isHost,
   isReadOnly,
+  isRoomLocked,
   fontSize,
   onLanguageChange,
   onLeaveRoom,
   onToggleReadOnly,
+  onToggleRoomLock,
+  onDeleteRoom,
   onRunCode,
   onDownload,
   onShowHistory,
@@ -268,18 +274,63 @@ export function RoomControls({
             {isReadOnly ? (
               <>
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                Enable Editing
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                </svg>
+                Disable Editing
+              </>
+            )}
+          </button>
+        )}
+
+        {/* Room Lock Toggle (Host Only) */}
+        {isHost && onToggleRoomLock && (
+          <button
+            onClick={onToggleRoomLock}
+            className={`w-full flex items-center justify-center gap-2 text-sm py-2 rounded-lg transition-colors border ${
+              isRoomLocked
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
+                : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
+            }`}
+          >
+            {isRoomLocked ? (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
-                Unlock Room
+                Unlock Room (Allow Joins)
               </>
             ) : (
               <>
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
                 </svg>
-                Lock Room
+                Lock Room (Prevent Joins)
               </>
             )}
+          </button>
+        )}
+
+        {/* Delete Room (Host Only) */}
+        {isHost && onDeleteRoom && (
+          <button
+            onClick={() => {
+              if (window.confirm("Are you sure you want to delete this room? This action cannot be undone and will kick all active users.")) {
+                onDeleteRoom();
+              }
+            }}
+            className="w-full flex items-center justify-center gap-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 text-sm py-2 rounded-lg transition-colors border border-red-900/50 mt-4"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete Room
           </button>
         )}
       </div>

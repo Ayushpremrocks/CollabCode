@@ -18,16 +18,28 @@ export function useCollaboration(roomCode: string): UseCollaborationReturn {
   const { getToken } = useAuth();
   const { user } = useUser();
 
+  // Store user display info in refs so we can read latest values
+  // without them being a dependency that tears down the WebSocket on change.
+  const userNameRef = useRef<string>('');
+  const userImageUrlRef = useRef<string>('');
+
+  // Keep refs in sync with latest Clerk user data
+  userNameRef.current = user?.fullName || user?.firstName || user?.username || '';
+  userImageUrlRef.current = user?.imageUrl || '';
+
   useEffect(() => {
+    // Only (re)connect when roomCode or getToken changes — NOT on user field changes.
     const doc = new Y.Doc();
     docRef.current = doc;
 
-    const userName = user?.fullName || user?.firstName || user?.username || '';
-    const userImageUrl = user?.imageUrl || '';
-
-    // Pass Clerk's getToken as the tokenGetter so the provider
-    // always uses a fresh session token on connect and reconnect.
-    const provider = new CollaborationProvider(roomCode, doc, getToken, userName, userImageUrl);
+    // Read the current name/imageUrl at connection time from refs
+    const provider = new CollaborationProvider(
+      roomCode,
+      doc,
+      getToken,
+      userNameRef.current,
+      userImageUrlRef.current
+    );
     providerRef.current = provider;
 
     const unsubscribe = provider.onConnectionChange((isConnected) => {
@@ -40,7 +52,10 @@ export function useCollaboration(roomCode: string): UseCollaborationReturn {
       doc.destroy();
       providerRef.current = null;
     };
-  }, [roomCode, getToken, user?.fullName, user?.firstName, user?.username, user?.imageUrl]);
+    // Intentionally ONLY depend on roomCode and getToken.
+    // userName and imageUrl are read from refs at connect time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode, getToken]);
 
   return {
     yDoc: docRef.current,

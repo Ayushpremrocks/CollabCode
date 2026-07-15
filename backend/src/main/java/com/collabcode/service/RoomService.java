@@ -73,9 +73,12 @@ public class RoomService {
         Room room = roomRepository.findByRoomCode(roomCode)
                 .orElseThrow(() -> new IllegalArgumentException("Room not found"));
 
-        // Check expiry
         if (room.getExpiresAt() != null && Instant.now().isAfter(room.getExpiresAt())) {
             throw new IllegalArgumentException("Room has expired");
+        }
+
+        if (room.isLocked() && !room.getOwner().getId().equals(user.getId()) && !participantRepository.existsByRoomIdAndUserId(room.getId(), user.getId())) {
+            throw new SecurityException("This room is locked by the host");
         }
 
         if (!participantRepository.existsByRoomIdAndUserId(room.getId(), user.getId())) {
@@ -139,6 +142,23 @@ public class RoomService {
         return roomName;
     }
 
+    @Transactional
+    public boolean toggleLock(String roomCode, boolean locked, String clerkUserId, String username, String email) {
+        User user = userProvisioningService.getOrCreateUser(clerkUserId, username, email);
+
+        Room room = roomRepository.findByRoomCode(roomCode)
+                .orElseThrow(() -> new IllegalArgumentException("Room not found"));
+
+        if (!room.getOwner().getId().equals(user.getId())) {
+            throw new SecurityException("Only the room owner can lock/unlock this room");
+        }
+
+        room.setLocked(locked);
+        roomRepository.save(room);
+        
+        return locked;
+    }
+
     /**
      * Update the room's last active time (called on each snapshot save).
      * Also extends expiry by 48h from now.
@@ -188,8 +208,10 @@ public class RoomService {
                 .name(room.getName())
                 .ownerUsername(room.getOwner().getUsername())
                 .ownerId(room.getOwner().getId())
+                .ownerClerkId(room.getOwner().getClerkUserId())
                 .createdAt(room.getCreatedAt())
                 .expiresAt(room.getExpiresAt())
+                .isLocked(room.isLocked())
                 .participants(participantNames)
                 .language(language)
                 .build();
