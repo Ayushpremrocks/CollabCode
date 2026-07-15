@@ -11,6 +11,8 @@ import lombok.NoArgsConstructor;
 @Builder
 public class ChatMessageDTO {
     private String username;
+    private String name;
+    private String imageUrl;
     private String message;
     private String timestamp;
 }

@@ -45,6 +45,8 @@ export interface JoinRoomRequest {
 export interface UserPresence {
   userId: number;
   username: string;
+  name?: string;
+  imageUrl?: string;
   online: boolean;
 }
 
@@ -70,6 +72,8 @@ export interface ReadOnlyToggleEvent {
 
 export interface ChatMessage {
   username: string;
+  name?: string;
+  imageUrl?: string;
   message: string;
   timestamp: string;
 }

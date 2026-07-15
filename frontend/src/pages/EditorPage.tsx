@@ -15,6 +15,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { roomService } from '../services/roomService';
 import { executionService } from '../services/executionService';
 import { downloadCode } from '../utils/downloadFile';
+import { useUser } from '@clerk/clerk-react';
 
 import {
   isSupportedLanguage,
@@ -46,6 +47,7 @@ export function EditorPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const clerkContext = useUser();
   const { stompClient, connected: stompConnected, publish } = useWebSocket();
   const { isDark } = useTheme();
 
@@ -215,8 +217,13 @@ export function EditorPage() {
 
   // Feature 7: Send chat
   const handleSendChat = useCallback((message: string) => {
-    publish(`/app/room/${roomCode}/chat`, { message });
-  }, [roomCode, publish]);
+    const clerkUser = clerkContext?.user;
+    publish(`/app/room/${roomCode}/chat`, { 
+      message,
+      name: clerkUser?.fullName || clerkUser?.firstName || clerkUser?.username || '',
+      imageUrl: clerkUser?.imageUrl || ''
+    });
+  }, [roomCode, publish, clerkContext?.user]);
 
   // Feature 7: Open chat (reset unread)
   const handleChatToggle = useCallback(() => {

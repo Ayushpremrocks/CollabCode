@@ -40,27 +40,39 @@ export function ActiveUsersPanel({ users, currentUsername }: ActiveUsersPanelPro
         {users.length === 0 ? (
           <p className="text-xs text-gray-500">No users connected</p>
         ) : (
-          users.map((user) => (
-            <div
-              key={user.userId}
-              className="flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-gray-800/50 transition-colors"
-            >
+          users.map((user) => {
+            const displayName = user.name || user.username;
+            return (
               <div
-                className={`w-7 h-7 rounded-full ${getAvatarColor(user.username)} flex items-center justify-center text-white text-xs font-medium shrink-0`}
+                key={user.userId + user.username}
+                className="flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-gray-800/50 transition-colors"
               >
-                {user.username.charAt(0).toUpperCase()}
+                {user.imageUrl ? (
+                  <img
+                    src={user.imageUrl}
+                    alt={displayName}
+                    className="w-7 h-7 rounded-full shrink-0 object-cover"
+                  />
+                ) : (
+                  <div
+                    className={`w-7 h-7 rounded-full ${getAvatarColor(user.username)} flex items-center justify-center text-white text-xs font-medium shrink-0`}
+                  >
+                    {displayName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-200 truncate">
+                    {displayName}
+                    {user.username === currentUsername && (
+                      <span className="text-gray-500 text-xs ml-1">(you)</span>
+                    )}
+                  </p>
+                </div>
+                <div className={`w-2 h-2 rounded-full shrink-0 ${user.online ? 'bg-emerald-400' : 'bg-gray-600'}`} />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-200 truncate">
-                  {user.username}
-                  {user.username === currentUsername && (
-                    <span className="text-gray-500 text-xs ml-1">(you)</span>
-                  )}
-                </p>
-              </div>
-              <div className={`w-2 h-2 rounded-full shrink-0 ${user.online ? 'bg-emerald-400' : 'bg-gray-600'}`} />
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

@@ -94,13 +94,19 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
             return;
         }
 
+        String name = extractQueryParam(session, "name");
+        String imageUrl = extractQueryParam(session, "imageUrl");
+
+        if (name != null) name = java.net.URLDecoder.decode(name, java.nio.charset.StandardCharsets.UTF_8);
+        if (imageUrl != null) imageUrl = java.net.URLDecoder.decode(imageUrl, java.nio.charset.StandardCharsets.UTF_8);
+
         // Register session
         roomSessions.computeIfAbsent(roomCode, k -> ConcurrentHashMap.newKeySet()).add(session);
         sessionRoomMap.put(session.getId(), roomCode);
         sessionUserMap.put(session.getId(), username);
 
         // Track presence
-        presenceService.addUser(roomCode, username, user.getId());
+        presenceService.addUser(roomCode, username, user.getId(), name, imageUrl);
 
         log.info("User '{}' connected to room '{}' (session: {})", username, roomCode, session.getId());
 
@@ -206,11 +212,15 @@ public class YjsWebSocketHandler extends BinaryWebSocketHandler {
     }
 
     private String extractToken(WebSocketSession session) {
+        return extractQueryParam(session, "token");
+    }
+
+    private String extractQueryParam(WebSocketSession session, String paramName) {
         String query = session.getUri() != null ? session.getUri().getQuery() : null;
         if (query != null) {
             for (String param : query.split("&")) {
                 String[] kv = param.split("=", 2);
-                if (kv.length == 2 && "token".equals(kv[0])) {
+                if (kv.length == 2 && paramName.equals(kv[0])) {
                     return kv[1];
                 }
             }

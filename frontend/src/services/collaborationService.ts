@@ -21,11 +21,21 @@ export class CollaborationProvider {
   private connectionListeners: Set<(connected: boolean) => void> = new Set();
 
   private tokenGetter: () => Promise<string | null>;
+  private userName: string;
+  private userImageUrl: string;
 
-  constructor(roomCode: string, doc: Y.Doc, tokenGetter: () => Promise<string | null>) {
+  constructor(
+    roomCode: string,
+    doc: Y.Doc,
+    tokenGetter: () => Promise<string | null>,
+    userName: string = '',
+    userImageUrl: string = ''
+  ) {
     this.roomCode = roomCode;
     this.doc = doc;
     this.tokenGetter = tokenGetter;
+    this.userName = userName;
+    this.userImageUrl = userImageUrl;
 
     // Listen for local document updates and broadcast
     this.doc.on('update', this.handleDocUpdate);
@@ -42,7 +52,9 @@ export class CollaborationProvider {
       return;
     }
 
-    const url = `${WS_BASE_URL}/${this.roomCode}?token=${encodeURIComponent(token)}`;
+    let url = `${WS_BASE_URL}/${this.roomCode}?token=${encodeURIComponent(token)}`;
+    if (this.userName) url += `&name=${encodeURIComponent(this.userName)}`;
+    if (this.userImageUrl) url += `&imageUrl=${encodeURIComponent(this.userImageUrl)}`;
 
     try {
       this.ws = new WebSocket(url);

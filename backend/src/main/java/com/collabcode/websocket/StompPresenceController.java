@@ -48,10 +48,6 @@ public class StompPresenceController {
         String language = documentService.getLanguage(roomCode);
         log.info("STOMP user-joined: user='{}' room='{}' language='{}'", username, roomCode, language);
 
-        List<UserPresenceDTO> activeUsers = presenceService.getActiveUsers(roomCode);
-        messagingTemplate.convertAndSend(
-                "/topic/room/" + roomCode + "/presence", activeUsers);
-
         RoomStateDTO roomState = RoomStateDTO.builder()
                 .roomCode(roomCode)
                 .language(language)
@@ -74,10 +70,6 @@ public class StompPresenceController {
 
         String username = principal.getName();
         log.info("STOMP: User '{}' left room '{}'", username, roomCode);
-
-        List<UserPresenceDTO> activeUsers = presenceService.getActiveUsers(roomCode);
-        messagingTemplate.convertAndSend(
-                "/topic/room/" + roomCode + "/presence", activeUsers);
     }
 
     @MessageMapping("/room/{roomCode}/language")
@@ -154,6 +146,8 @@ public class StompPresenceController {
 
         String username = principal.getName();
         String message = payload.get("message");
+        String name = payload.get("name");
+        String imageUrl = payload.get("imageUrl");
 
         if (message == null || message.isBlank()) return;
 
@@ -167,6 +161,8 @@ public class StompPresenceController {
 
         ChatMessageDTO chatMsg = ChatMessageDTO.builder()
                 .username(username)
+                .name(name)
+                .imageUrl(imageUrl)
                 .message(message)
                 .timestamp(Instant.now().toString())
                 .build();

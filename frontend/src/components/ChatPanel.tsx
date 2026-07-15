@@ -103,22 +103,31 @@ export function ChatPanel({
           messages.map((msg, i) => {
             const isOwn = msg.username === currentUsername;
             const color = getUserColor(msg.username);
+            const displayName = msg.name || msg.username;
 
             return (
               <div key={i} className={`chat-message-enter flex gap-2 ${isOwn ? 'flex-row-reverse' : ''}`}>
                 {/* Avatar */}
-                <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 mt-0.5"
-                  style={{ backgroundColor: color }}
-                >
-                  {msg.username[0].toUpperCase()}
-                </div>
+                {msg.imageUrl ? (
+                  <img
+                    src={msg.imageUrl}
+                    alt={displayName}
+                    className="w-6 h-6 rounded-full shrink-0 mt-0.5 object-cover"
+                  />
+                ) : (
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 mt-0.5"
+                    style={{ backgroundColor: color }}
+                  >
+                    {displayName.charAt(0).toUpperCase()}
+                  </div>
+                )}
 
                 {/* Bubble */}
                 <div className={`max-w-[75%] ${isOwn ? 'items-end' : 'items-start'} flex flex-col gap-0.5`}>
                   {!isOwn && (
                     <span className="text-xs font-medium" style={{ color }}>
-                      {msg.username}
+                      {displayName}
                     </span>
                   )}
                   <div

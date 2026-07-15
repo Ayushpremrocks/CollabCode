@@ -13,5 +13,7 @@ public class UserPresenceDTO {
 
     private Long userId;
     private String username;
+    private String name;
+    private String imageUrl;
     private boolean online;
 }
