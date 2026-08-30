@@ -59,7 +59,7 @@ export function DashboardPage() {
   const [flashMessage, setFlashMessage] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { isDark } = useTheme();
 
   useEffect(() => {
@@ -73,8 +73,10 @@ export function DashboardPage() {
   }, [location.search]);
 
   useEffect(() => {
-    loadRooms();
-  }, []);
+    if (isAuthenticated) {
+      loadRooms();
+    }
+  }, [isAuthenticated]);
 
   const loadRooms = async () => {
     try {

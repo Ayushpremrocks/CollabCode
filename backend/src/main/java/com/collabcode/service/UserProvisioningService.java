@@ -41,7 +41,31 @@ public class UserProvisioningService {
     public User getOrCreateUser(String clerkUserId, String username, String email) {
         return userRepository.findByClerkUserId(clerkUserId)
                 .orElseGet(() -> {
+                    // Try linking via email if a legacy user already exists with this email address
+                    if (email != null && !email.isBlank()) {
+                        java.util.Optional<User> existingUserOpt = userRepository.findByEmail(email);
+                        if (existingUserOpt.isPresent()) {
+                            User existingUser = existingUserOpt.get();
+                            log.info("Linking existing local user ID: {} with Clerk ID: {}", existingUser.getId(), clerkUserId);
+                            existingUser.setClerkUserId(clerkUserId);
+                            // Update display name if it's currently empty or invalid
+                            if (existingUser.getUsername() == null || existingUser.getUsername().isBlank()) {
+                                existingUser.setUsername(resolveDisplayName(username, email, clerkUserId));
+                            }
+                            return userRepository.save(existingUser);
+                        }
+                    }
+
                     String displayName = resolveDisplayName(username, email, clerkUserId);
+                    
+                    // If the resolved display name already exists, generate a unique variant to avoid constraint violation
+                    if (userRepository.existsByUsername(displayName)) {
+                        displayName = clerkUserId.length() > 12 ? clerkUserId.substring(0, 12) : clerkUserId;
+                        if (userRepository.existsByUsername(displayName)) {
+                            displayName = displayName + "_" + (System.currentTimeMillis() % 1000);
+                        }
+                    }
+
                     String resolvedEmail = email != null ? email : clerkUserId + "@clerk.local";
 
                     log.info("Auto-provisioning new local user for Clerk ID: {} (display: {})",

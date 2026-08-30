@@ -92,12 +92,14 @@ public class RoomService {
         return toRoomResponse(room);
     }
 
+    @Transactional(readOnly = true)
     public RoomResponse getRoomByCode(String roomCode) {
         Room room = roomRepository.findByRoomCode(roomCode)
                 .orElseThrow(() -> new IllegalArgumentException("Room not found"));
         return toRoomResponse(room);
     }
 
+    @Transactional
     public List<RoomResponse> getUserRooms(String clerkUserId, String username, String email) {
         User user = userProvisioningService.getOrCreateUser(clerkUserId, username, email);
 

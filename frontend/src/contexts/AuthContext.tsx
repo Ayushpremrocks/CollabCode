@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useCallback, type ReactNode } from 'react';
 import {
   useAuth as useClerkAuth,
   useUser,
@@ -7,7 +7,7 @@ import {
 import { setClerkTokenGetter } from '../services/api';
 
 interface AuthContextType {
-  user: { userId: number; username: string; email: string } | null;
+  user: { userId: number; username: string; email: string; clerkUserId: string } | null;
   isAuthenticated: boolean;
   loading: boolean;
   login: (data: unknown) => Promise<void>;
@@ -30,15 +30,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [getToken]
   );
 
-  useEffect(() => {
-    setClerkTokenGetter(stableGetToken);
-  }, [stableGetToken]);
+  // Set synchronously during render so child components can use it immediately on mount
+  setClerkTokenGetter(stableGetToken);
 
   const user = clerkUser
     ? {
         userId: 0,
         username: clerkUser.primaryEmailAddress?.emailAddress?.split('@')[0] || 'User',
         email: clerkUser.primaryEmailAddress?.emailAddress || '',
+        clerkUserId: clerkUser.id,
       }
     : null;
 

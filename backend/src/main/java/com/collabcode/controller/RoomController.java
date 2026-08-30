@@ -69,11 +69,26 @@ public class RoomController {
     @GetMapping
     public ResponseEntity<List<RoomResponse>> getUserRooms(
             @AuthenticationPrincipal Jwt jwt) {
-        List<RoomResponse> rooms = roomService.getUserRooms(
-                jwt.getSubject(),
-                jwt.getClaimAsString("username"),
-                jwt.getClaimAsString("email"));
-        return ResponseEntity.ok(rooms);
+        System.out.println("[RoomController] getUserRooms called!");
+        if (jwt == null) {
+            System.out.println("[RoomController] JWT is null!");
+            throw new IllegalStateException("Authentication token is missing");
+        } else {
+            System.out.println("[RoomController] JWT Subject: " + jwt.getSubject());
+            System.out.println("[RoomController] JWT Claims: " + jwt.getClaims());
+        }
+        try {
+            List<RoomResponse> rooms = roomService.getUserRooms(
+                    jwt.getSubject(),
+                    jwt.getClaimAsString("username"),
+                    jwt.getClaimAsString("email"));
+            System.out.println("[RoomController] getUserRooms returning " + rooms.size() + " rooms.");
+            return ResponseEntity.ok(rooms);
+        } catch (Exception e) {
+            System.err.println("[RoomController] Exception in getUserRooms:");
+            e.printStackTrace();
+            throw e;
+        }
     }
 
     /**
