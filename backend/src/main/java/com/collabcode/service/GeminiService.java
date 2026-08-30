@@ -23,10 +23,11 @@ public class GeminiService {
     private static final Logger log = LoggerFactory.getLogger(GeminiService.class);
 
     /**
-     * Model to use. gemini-2.0-flash is fast, cost-efficient, and supports
-     * function calling — ideal for the future agentic debugging loop.
+     * Model to use.
+     * gemini-3.6-flash: verified working with this project's API key.
+     * Fast, cost-efficient, and supports function calling for the agentic loop.
      */
-    private static final String MODEL = "gemini-2.0-flash";
+    private static final String MODEL = "gemini-3.6-flash";
 
     @Value("${app.gemini.api-key:}")
     private String apiKey;
@@ -66,8 +67,15 @@ public class GeminiService {
             // Re-throw config errors as-is
             throw e;
         } catch (Exception e) {
-            // Wrap Gemini API/network errors — never expose raw exception to the client
-            log.error("[GeminiService] Gemini API call failed: {} — {}", e.getClass().getSimpleName(), e.getMessage());
+            // Log the full error chain WITHOUT the API key so Render logs show the root cause.
+            // e.getMessage() may contain the HTTP status + Gemini error body — safe to log.
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            log.error("[GeminiService] Gemini API call failed.");
+            log.error("[GeminiService]   Model           : {}", MODEL);
+            log.error("[GeminiService]   Exception class : {}", e.getClass().getName());
+            log.error("[GeminiService]   Exception msg   : {}", e.getMessage());
+            log.error("[GeminiService]   Cause class     : {}", cause.getClass().getName());
+            log.error("[GeminiService]   Cause msg       : {}", cause.getMessage());
             throw new RuntimeException("AI service is temporarily unavailable. Please try again later.", e);
         }
     }
