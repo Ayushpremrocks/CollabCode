@@ -1,0 +1,177 @@
+@import "tailwindcss";
+
+/* ======================================
+   Theme: Dark / Light Mode Variables
+   ====================================== */
+:root {
+  --bg-primary: #030712;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1f2937;
+  --border-color: #1f2937;
+  --text-primary: #f9fafb;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+}
+
+:root.light {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #f1f5f9;
+  --bg-tertiary: #e2e8f0;
+  --border-color: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+}
+
+/* ======================================
+   Yjs Remote Cursor Styles
+   ====================================== */
+.yRemoteSelection {
+  background-color: rgba(99, 102, 241, 0.25);
+}
+
+.yRemoteSelectionHead {
+  position: absolute;
+  border-left: 2px solid #6366f1;
+  border-top: 2px solid #6366f1;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* Per-user cursor colors */
+.yRemoteSelection-0 { background-color: rgba(99, 102, 241, 0.25); }
+.yRemoteSelectionHead-0 { border-color: #6366f1; }
+
+.yRemoteSelection-1 { background-color: rgba(16, 185, 129, 0.25); }
+.yRemoteSelectionHead-1 { border-color: #10b981; }
+
+.yRemoteSelection-2 { background-color: rgba(245, 158, 11, 0.25); }
+.yRemoteSelectionHead-2 { border-color: #f59e0b; }
+
+.yRemoteSelection-3 { background-color: rgba(239, 68, 68, 0.25); }
+.yRemoteSelectionHead-3 { border-color: #ef4444; }
+
+.yRemoteSelection-4 { background-color: rgba(6, 182, 212, 0.25); }
+.yRemoteSelectionHead-4 { border-color: #06b6d4; }
+
+.yRemoteSelection-5 { background-color: rgba(139, 92, 246, 0.25); }
+.yRemoteSelectionHead-5 { border-color: #8b5cf6; }
+
+/* ======================================
+   Line Authorship Gutter Decorations
+   ====================================== */
+.line-author-gutter {
+  width: 3px !important;
+  cursor: pointer;
+  transition: width 0.15s ease;
+}
+
+.line-author-gutter:hover {
+  width: 6px !important;
+}
+
+/* Color-specific gutter decorations */
+.line-author-0 { background-color: #6366f1; }
+.line-author-1 { background-color: #10b981; }
+.line-author-2 { background-color: #f59e0b; }
+.line-author-3 { background-color: #ef4444; }
+.line-author-4 { background-color: #06b6d4; }
+.line-author-5 { background-color: #8b5cf6; }
+.line-author-6 { background-color: #f97316; }
+.line-author-7 { background-color: #14b8a6; }
+
+/* ======================================
+   Output Panel
+   ====================================== */
+.output-panel-resize-handle {
+  cursor: row-resize;
+  user-select: none;
+}
+
+.output-panel-resize-handle:hover {
+  background-color: #4f46e5;
+}
+
+/* ======================================
+   Global scrollbar styling
+   ====================================== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
+
+/* Light mode scrollbar */
+:root.light ::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+}
+
+:root.light ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* ======================================
+   Landing page animations
+   ====================================== */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.3); }
+  50% { box-shadow: 0 0 40px rgba(99, 102, 241, 0.6); }
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes typing {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes blink-caret {
+  from, to { border-color: transparent; }
+  50% { border-color: #6366f1; }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.gradient-animated {
+  background-size: 200% 200%;
+  animation: gradient-shift 4s ease infinite;
+}
+
+/* ======================================
+   Chat panel
+   ====================================== */
+.chat-message-enter {
+  animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}

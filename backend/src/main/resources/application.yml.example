@@ -1,0 +1,41 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  config:
+    # Loads backend/.env as a properties file for local development.
+    # The 'optional:' prefix means Spring Boot silently skips this if the file
+    # does not exist (e.g. on Render, where env vars are injected by the platform).
+    import: "optional:file:.env[.properties]"
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  sql:
+    init:
+      mode: ${SPRING_SQL_INIT_MODE:always}
+      schema-locations: classpath:schema.sql
+
+app:
+  clerk:
+    # Get from: Clerk Dashboard → API Keys → JWKS URL
+    jwks-uri: ${CLERK_JWKS_URI}
+
+  jwt:
+    secret: ${JWT_SECRET}
+    expiration-ms: 86400000
+
+  cors:
+    # Comma-separated allowed origins. Default covers local dev + Vercel production.
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174,https://collab-code-application.vercel.app}
