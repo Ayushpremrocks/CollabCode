@@ -41,8 +41,22 @@ public class CodeExecutionService {
             Map.entry("bash",       "bash")
     );
 
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    // Lazily initialized to avoid blocking startup.
+    // HttpClient.newHttpClient() spawns a SelectorManager thread; on Render's free-tier
+    // sandbox (0.1 CPU) that thread never gets scheduled during startup, causing a hang.
+    private volatile HttpClient httpClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private HttpClient getHttpClient() {
+        if (httpClient == null) {
+            synchronized (this) {
+                if (httpClient == null) {
+                    httpClient = HttpClient.newHttpClient();
+                }
+            }
+        }
+        return httpClient;
+    }
 
     public ExecuteCodeResponse execute(ExecuteCodeRequest request) {
         String compilerId = LANGUAGE_TO_WANDBOX_COMPILER.get(request.getLanguage());
@@ -72,7 +86,7 @@ public class CodeExecutionService {
                     .build();
 
             log.info("Sending compile request to Wandbox for compiler: {}", compilerId);
-            HttpResponse<String> response = httpClient.send(apiRequest, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = getHttpClient().send(apiRequest, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() >= 400) {
                 log.error("Wandbox API error: {}", response.body());
