@@ -2,18 +2,14 @@ import { useState, useRef, useEffect } from 'react';
 import { agentService } from '../services/agentService';
 
 /**
- * AgentPanel — Phase 1 test UI for the CollabCode AI Agent.
+ * AgentPanel — conversational AI assistant for CollabCode.
  *
- * This is a minimal integration-test panel that proves the
- *   Browser → Spring Boot → Gemini → Spring Boot → Browser
- * flow works end-to-end.
+ * Allows users to ask coding questions or send the active editor code
+ * for instant analysis and guidance.
  *
- * It is intentionally simple and visually separated from the rest of the UI.
- * Phase 2 will replace this with the full autonomous debugging agent interface
- * (inspect code → run → propose fix → verify → human approval loop).
- *
- * Security: this panel never communicates with Gemini directly.
- * All prompts go through /api/agent/test on our Spring Boot backend.
+ * Security: All prompts are routed through /api/agent/test on the
+ * Spring Boot backend with Clerk JWT authentication. The Gemini API
+ * key is never exposed to the client.
  */
 
 interface AgentPanelProps {
@@ -95,10 +91,6 @@ export function AgentPanel({
             <path d="M12 2l2.09 6.26L20 9.27l-4.95 3.84 1.89 6.27L12 16.12l-4.94 3.26 1.89-6.27L4 9.27l5.91-1.01z" />
           </svg>
           AI Agent
-          {/* Phase badge */}
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30">
-            Phase 1
-          </span>
         </span>
         <svg
           className={`w-3 h-3 text-gray-500 transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
@@ -111,8 +103,8 @@ export function AgentPanel({
       {!isCollapsed && (
         <div className="px-3 pb-3 space-y-2 border-t border-gray-800/60">
           {/* Description */}
-          <p className="text-[11px] text-gray-500 pt-2">
-            Ask Gemini anything about your code. Full autonomous debugging loop coming in Phase 2.
+          <p className="text-[11px] text-gray-400 pt-2 leading-relaxed">
+            Ask Gemini about your code, explain errors, and get coding guidance.
           </p>
 
           {/* Pre-fill button */}

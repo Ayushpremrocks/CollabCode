@@ -10,20 +10,20 @@ export interface AgentTestResponse {
 }
 
 /**
- * agentService — Phase 1 + Phase 2
+ * agentService
  *
  * All calls go through our Spring Boot backend. The Gemini API key
  * lives entirely server-side and is never exposed to the browser.
  */
 export const agentService = {
-  /** Phase 1: send a free-form prompt, receive Gemini's text response. */
+  /** Send a free-form prompt to the AI agent, receive Gemini's text response. */
   async testPrompt(prompt: string): Promise<string> {
     const response = await api.post<AgentTestResponse>('/agent/test', { prompt });
     return response.data.response;
   },
 
   /**
-   * Phase 2: start an agentic debugging session.
+   * Start an autonomous debugging session.
    *
    * The backend will:
    *  1. Run the original code (via existing CodeExecutionService).

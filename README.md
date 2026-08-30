@@ -1,6 +1,6 @@
 # CollabCode
 
-> A modern, real-time collaborative code editor featuring conflict-free synchronization, live presence, in-editor chat, and multi-language code execution.
+> Real-time collaborative code editor with an integrated autonomous AI debugging agent powered by Google Gemini and execution-feedback verification.
 
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -8,399 +8,330 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.3.5-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
 [![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
+[![Google Gemini](https://img.shields.io/badge/AI-Google_Gemini_3.6_Flash-8E75B2?logo=googlegemini&logoColor=white)](https://ai.google.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-4169E1?logo=postgresql&logoColor=white)](https://neon.tech/)
 [![Clerk](https://img.shields.io/badge/Auth-Clerk-6C47FF?logo=clerk&logoColor=white)](https://clerk.com/)
 
 ---
 
-## 🌐 Live Demo
+## 🌐 Live Deployments
 
-- **Web Application:** [https://collab-code-application.vercel.app](https://collab-code-application.vercel.app/) *(Hosted on Vercel)*
-- **API & WebSocket Server:** [https://collabcode-lsor.onrender.com](https://collabcode-lsor.onrender.com) *(Hosted on Render)*
+- **Web Application (Frontend):** [https://collab-code-application.vercel.app](https://collab-code-application.vercel.app/) *(Hosted on Vercel)*
+- **API & WebSocket Server (Backend):** [https://collabcode-lsor.onrender.com](https://collabcode-lsor.onrender.com) *(Hosted on Render)*
 
-> **Note on Free-Tier Hosting:** The backend service is hosted on Render's free tier. If the instance has been idle for more than 15 minutes, the initial request or room connection may take 50–70 seconds while the container spins up. Subsequent interactions will be instantaneous.
+> **Note on Free-Tier Hosting:** The backend is deployed on Render's free tier. If the service has been idle for more than 15 minutes, initial spin-up may take 50–70 seconds. Subsequent requests and WebSocket sessions are instantaneous.
 
 ---
 
-## 📸 Preview
+## Overview
+
+Modern software development is inherently collaborative, yet debugging collaboratively remains fragmented. When a program fails during a pair-programming session, developers typically switch between external AI chatbots, local terminal outputs, and manual code pasting. Chatbots frequently generate plausible-looking code that fails to compile or introduces regressions because they operate without real execution context.
+
+**CollabCode** solves this by unifying:
+1. **Real-time collaborative code editing** with conflict-free replication (CRDTs).
+2. **AI assistance** directly in the editor workspace.
+3. **Autonomous debugging** with a closed-loop execution feedback cycle.
+4. **Verified execution** before suggestions are presented to developers.
+5. **Human approval** as an uncompromised safety gate before shared code is modified.
+
+---
+
+## Features
+
+### Collaborative Editor
+- **Real-Time Multi-User Editing:** Powered by **Yjs** CRDTs (`y-monaco`, `y-protocols`). Multiple developers can concurrently edit the same document with zero merge conflicts or lost keystrokes.
+- **Room-Based Collaboration:** Instant 8-character shareable room codes. Rooms persist across disconnects and support up to 48 hours of activity.
+- **Visual Presence & Authorship:** Live participant avatars, display names, deterministic per-user cursor colors, and line-level gutter authorship markers.
+- **In-Editor Chat & Host Controls:** Built-in messaging panel, room locking (prevent new joins), read-only mode (for presentations), and safe room deletion.
+
+### AI Agent
+- **In-Context Q&A:** Ask questions about your code, explain complex algorithms, and analyze logic errors directly in the editor.
+- **Editor Context Injection:** One-click pre-fill inserts active editor code and language into the prompt buffer.
+- **Authenticated Backend Routing:** All prompts pass through `/api/agent/test` on the Spring Boot backend authenticated via Clerk JWTs. The Gemini API key is never exposed to the client.
+
+### AI Debug Agent
+The flagship agentic capability of CollabCode. Rather than offering static code completions, the AI Debug Agent executes an autonomous, multi-step diagnostic and repair loop:
+
+1. **Execute Original Code:** Submits the current editor buffer to `CodeExecutionService` (via Wandbox) to capture real runtime behavior.
+2. **Observe Compiler / Runtime Failure:** Collects actual `stderr`, compile errors, and exit codes.
+3. **Send Code + Failure Diagnostics to Gemini:** Constructs a structured diagnostic prompt containing the exact failure output, source code, language, and optional user hints.
+4. **Generate Proposed Fix:** Gemini (`gemini-3.6-flash`) reasons about the root cause and generates a complete, corrected code implementation.
+5. **Execute the Proposed Fix:** The agent submits the proposed fix to the execution sandbox to run it against the compiler/runtime.
+6. **Inspect Verification Result:** Analyzes execution status (checks for `Accepted` statusId 3).
+7. **Iterate When Necessary:** If the fix still fails, updates the error context with the new compiler diagnostics and retries (up to the configured maximum of 3 iterations).
+8. **Present Verified Result to User:** Displays the agent's step-by-step reasoning, initial failure logs, verification output, and a side-by-side original vs. proposed fix comparison.
+9. **Apply Change Only After Human Approval:** The patch is **never** applied automatically. The user reviews the verified diff and clicks **Approve & Apply** to atomically update the shared Yjs document, or **Reject** to keep the editor untouched.
+
+### Code Execution
+- Integrated via `CodeExecutionService` using Wandbox's keyless compilation engine.
+- Supports 14 programming languages with output inspection (`stdout`, `stderr`, compiler logs, and status mapping).
+
+### Authentication
+- Seamless authentication via **Clerk** (supporting Google OAuth and email sign-in).
+- Backend requests are secured with Spring Security OAuth2 Resource Server, decoding and validating Clerk JWTs against Clerk's remote JWKS endpoint (`CLERK_JWKS_URI`).
+
+### Persistence
+- Hosted on **Neon Serverless PostgreSQL**.
+- Manages users, room metadata, participant presence, and periodic binary document snapshots (`BYTEA`) for rollback and session restoration.
+
+### AI Reasoning Engine
+- Powered by **Google Gemini** using the official `com.google.genai:google-genai:1.68.0` SDK.
+- Configured with verified model **`gemini-3.6-flash`** for low-latency reasoning and robust code generation.
+- The `GEMINI_API_KEY` is strictly managed backend-only and never logged or leaked.
+
+---
+
+## Architecture
+
+```text
+Browser Client (React 19 + Monaco + Yjs)
+  │
+  ├──► Raw Binary WebSocket (/ws/yjs/{roomCode}) ──► YjsWebSocketHandler (Binary CRDT Relay)
+  │                                                        │
+  │                                                        ▼
+  │                                                   Neon PostgreSQL (Snapshots)
+  │
+  ├──► STOMP over WebSocket (/ws/stomp) ───────────► StompWebSocketConfig (Chat & Presence)
+  │
+  └──► HTTPS REST API (/api/*) ────────────────────► Spring Boot Backend
+                                                           │
+                                                           ├──► Clerk JWKS (Token Validation)
+                                                           │
+                                                           ├──► Neon PostgreSQL (JPA Entities)
+                                                           │
+                                                           ├──► GeminiService (gemini-3.6-flash)
+                                                           │
+                                                           └──► CodeExecutionService
+                                                                      │
+                                                                      ▼
+                                                                 Wandbox API (Sandbox Execution)
+```
+
+---
+
+## Agentic Debugging Workflow
 
 ```
-+-----------------------------------------------------------------------------------+
-|  CollabCode | Room: algorithm-lab (#X9K2PL8M)            [Python 3]  [ Run Code ] |
-+-----------------------+-------------------------------------------+---------------+
-| ACTIVE USERS (3)      | 1  def quicksort(arr):                     | OUTPUT        |
-| * Ayush Prem (Host)   | 2      if len(arr) <= 1:                  | > [1, 2, 5, 9]|
-| * Sarah Jenkins       | 3          return arr                     |               |
-| * Alex Chen           | 4      pivot = arr[len(arr) // 2]         | Execution:    |
-+-----------------------+ 5      left = [x for x in arr if x < ...  | Status: OK    |
-| LIVE CHAT             | 6      middle = [x for x in arr if ...    | Time: 120ms   |
-| Alex: Checking line 5 | 7      right = [x for x in arr if ...     |               |
-| Sarah: Looks good!    | 8      return quicksort(left) + middle ...|               |
-+-----------------------+-------------------------------------------+---------------+
+[ User clicks "Debug with AI Agent" ]
+                 │
+                 ▼
+      [ Step 1: Run Original Code ]
+                 │
+                 ▼
+      [ Step 2: Observe Failure ] ──► (Compiler error / Runtime exception)
+                 │
+                 ▼
+      [ Step 3: Prompt Gemini ] ────► (Code + Compiler diagnostics + User hint)
+                 │
+                 ▼
+      [ Step 4: Extract Proposed Fix ]
+                 │
+                 ▼
+      [ Step 5: Execute Proposed Fix in Sandbox ]
+                 │
+                 ▼
+      [ Step 6: Verify Execution Result ]
+           /                   \
+      (Still Failing)      (Status: Accepted)
+         │                         │
+         ▼                         ▼
+   [ Step 7: Iterate ]     [ Step 8: Present Verified Result ]
+   (Up to 3 rounds)                │
+                                   ▼
+                       [ Step 9: Human Approval Gate ]
+                                /             \
+                       [ User Approves ]    [ User Rejects ]
+                              │                    │
+                              ▼                    ▼
+                      Atomically update       Keep original
+                      shared Yjs document     code unchanged
 ```
-*(Add an animated GIF or application screenshot here: `assets/demo-preview.gif`)*
+
+### Why This is Genuinely Agentic
+
+Unlike simple AI chatbots or autocomplete extensions:
+- **It observes reality:** The agent inspects actual compiler errors and program exit codes produced by the Wandbox runtime, not assumptions.
+- **It tests its own work:** Before presenting a solution to the user, the agent executes the proposed code in an isolated sandbox.
+- **It iterates autonomously:** If iteration 1 fails to resolve the compiler error, the agent incorporates the new error output and attempts an alternative approach.
+- **Human in the loop:** Autonomy is bounded by human authority. Shared collaborative code is only modified when a developer explicitly reviews and approves the verified patch.
 
 ---
 
-## ✨ Features
-
-- **Conflict-Free Real-Time Collaboration:** Powered by **Yjs CRDTs** over binary WebSockets. Multiple users can concurrently type, format, and edit the exact same document without race conditions or merge conflicts.
-- **Dual-Channel WebSocket Architecture:**
-  - **Raw Binary Channel (`/ws/yjs/{roomCode}`):** High-throughput relay for serialized Yjs CRDT update vectors.
-  - **STOMP Messaging Channel (`/ws/stomp`):** Pub/sub event streaming for presence, cursor awareness, language switches, room locking, and live chat.
-- **Visual Gutter Authorship & Cursors:** Identifies collaborators with unique, deterministic color badges, gutter markers, and real-time cursor tracking.
-- **Multi-Language Remote Code Execution:** Integrated with the **Wandbox compiler engine**, enabling developers to execute code directly from the editor across 14 supported languages with output inspection (`stdout`, `stderr`, compile errors).
-- **Comprehensive Language Support:** Monaco editor syntax highlighting, bracket matching, and auto-indentation across **20 languages** (JavaScript, TypeScript, Python, Java, C++, C, C#, Go, Rust, Kotlin, Swift, Ruby, PHP, SQL, HTML, CSS, JSON, Markdown, YAML, Bash).
-- **Robust Host Room Controls:**
-  - **Room Locking:** Prevents new participants from joining an in-progress session.
-  - **Read-Only Mode:** Host can temporarily lock participant edits during presentations or instructions.
-  - **Session Termination:** Hosts can cleanly delete rooms and disconnect participants with live notification broadcasts.
-- **Document Snapshot History & Rollback:** Server auto-persists document snapshots periodically. Room hosts can inspect revision history and roll back to any past state with a single click.
-- **Secure Authentication with Clerk:** Frictionless Google OAuth and email authentication. Session tokens are securely verified on the backend via Clerk JWKS public keys.
-- **In-Editor Team Chat:** Real-time text messaging with user avatars and timestamps, letting teams discuss code changes without leaving the workflow.
-- **Code Download & Customization:** One-click source code export with language-accurate file extensions, along with interactive editor font-size controls.
-- **Room Lifecycle Management:** Rooms are assigned unique 8-character codes, persist across disconnects, and auto-expire after 48 hours of inactivity via an automated background cleaner.
-
----
-
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Frontend
 - **Framework & Language:** React 19, TypeScript
-- **Bundler & Build Tool:** Vite 6
+- **Bundler:** Vite 6
 - **Styling:** Tailwind CSS v4
-- **Editor Engine:** Monaco Editor (`@monaco-editor/react`, `monaco-editor`)
+- **Editor:** Monaco Editor (`@monaco-editor/react`)
 - **CRDT Synchronization:** Yjs, `y-monaco`, `y-protocols`, `lib0`
-- **Real-Time Client:** `@stomp/stompjs`
+- **Real-Time Messaging:** `@stomp/stompjs`
 - **Authentication Client:** `@clerk/clerk-react`
-- **HTTP Client:** Axios (configured with automated Clerk Bearer token interceptor)
+- **HTTP Client:** Axios (with Clerk token interceptor)
 - **Routing:** React Router DOM v7
 
 ### Backend
 - **Platform & Language:** Spring Boot 3.3.5, Java 21
 - **Security:** Spring Security 6 (OAuth2 Resource Server validating Clerk JWTs via JWKS)
-- **Real-Time Communication:** Spring WebSocket, Spring Messaging (STOMP subprotocol)
-- **Data Access & ORM:** Spring Data JPA, Hibernate 6
-- **Database Driver:** PostgreSQL JDBC Driver
-- **Utilities:** Project Lombok
-- **Compilation & Execution Runner:** Wandbox API
+- **AI SDK:** `com.google.genai:google-genai:1.68.0`
+- **AI Model:** `gemini-3.6-flash`
+- **Real-Time Communication:** Spring WebSocket (Binary Handler + STOMP Broker)
+- **Data Access:** Spring Data JPA, Hibernate 6
+- **Database:** PostgreSQL (Neon Serverless)
+- **Code Execution:** Wandbox REST API
 
-### Infrastructure & Services
-- **Database:** Neon Serverless PostgreSQL
-- **User Management & Identity:** Clerk
-- **Frontend Hosting:** Vercel
-- **Backend Hosting:** Render (Containerized Docker deployment)
-
----
-
-## 🏗️ Architecture Overview
-
-CollabCode separates document editing traffic from application state management through a dual-protocol WebSocket architecture:
-
-```mermaid
-flowchart TD
-    User([User Browser])
-    
-    subgraph Frontend["Vercel (React 19 + Vite)"]
-        Monaco[Monaco Editor]
-        YjsDoc[Yjs CRDT Document]
-        StompClient[STOMP.js Client]
-        ClerkSDK[Clerk Auth SDK]
-        AxiosClient[Axios REST Client]
-    end
-
-    subgraph AuthProvider["Authentication"]
-        Clerk[Clerk Identity Platform]
-    end
-
-    subgraph Backend["Render (Spring Boot 3.3 / Java 21)"]
-        Security[Spring Security / JWKS Validator]
-        YjsHandler[YjsWebSocketHandler\n/ws/yjs/{roomCode}]
-        StompBroker[STOMP Message Broker\n/ws/stomp]
-        RoomCtrl[Room REST Controller\n/api/rooms]
-        ExecService[CodeExecutionService]
-    end
-
-    subgraph External["Third-Party Services"]
-        Wandbox[Wandbox Compiler API]
-        NeonDB[(Neon PostgreSQL)]
-    end
-
-    User --> Frontend
-    ClerkSDK <-->|OAuth / JWT| Clerk
-    
-    %% REST
-    AxiosClient -->|HTTP REST + Bearer Token| RoomCtrl
-    RoomCtrl --> Security
-    Security -.->|Verify JWKS| Clerk
-    RoomCtrl --> NeonDB
-    RoomCtrl --> ExecService
-    ExecService -->|Compile & Run| Wandbox
-    
-    %% WebSockets
-    Monaco <--> YjsDoc
-    YjsDoc <-->|Raw Binary WS\nCRDT Updates| YjsHandler
-    YjsHandler <-->|Relay to peers| Frontend
-    YjsHandler -->|Persist Snapshots| NeonDB
-    
-    StompClient <-->|STOMP over WS\nChat / Presence / Locks| StompBroker
-    StompBroker --> Security
-```
-
-### How Real-Time Collaboration Works
-
-1. **Authentication:** The user logs in via Clerk on the frontend. The resulting session JWT is attached as a `Bearer` token to HTTP calls and passed into WebSocket connection handshakes.
-2. **Document CRDT Sync (`/ws/yjs/{roomCode}`):**
-   - The editor binds Monaco directly to a local Yjs text type (`y-monaco`).
-   - Every keystroke produces a binary diff encoded using Yjs protocols.
-   - The diff is transmitted over a raw binary WebSocket to `YjsWebSocketHandler`.
-   - The server acts as a low-latency relay, broadcasting update frames to other clients in the room without decrypting or recalculating text offsets.
-   - Because Yjs uses Conflict-free Replicated Data Types, concurrent edits converge identically across all connected clients.
-3. **Application Events (`/ws/stomp`):**
-   - STOMP manages high-level features including active presence tracking, user join/leave announcements, language switching, chat messages, and host lock state.
-   - The `StompAuthChannelInterceptor` intercepts incoming `CONNECT` frames to validate the Clerk JWT, injecting an authenticated principal into the session.
-4. **Snapshot Persistence:**
-   - Active document states are captured and persisted to the PostgreSQL database as binary snapshots (`BYTEA`), enabling document recovery across browser restarts and revision rollbacks.
+### Hosting & Infrastructure
+- **Frontend SPA:** Vercel
+- **Backend Container:** Render (Docker containerized)
+- **Database:** Neon
 
 ---
 
-## 📁 Repository Structure
-
-```text
-CollabCode/
-├── backend/
-│   ├── src/
-│   │   ├── main/
-│   │   │   ├── java/com/collabcode/
-│   │   │   │   ├── config/          # Spring Security, CORS, and WebSocket configuration
-│   │   │   │   ├── controller/      # REST API endpoints (Rooms, Snapshots, Execution)
-│   │   │   │   ├── dto/             # Request/response data transfer objects
-│   │   │   │   ├── model/           # JPA entities (User, Room, Snapshot, Participant)
-│   │   │   │   ├── repository/      # Spring Data JPA interfaces
-│   │   │   │   ├── security/        # Clerk JWT validation and JWKS decoding
-│   │   │   │   ├── service/         # Core business logic (Execution, Rooms, Documents, Presence)
-│   │   │   │   └── websocket/       # Yjs binary WS relay and STOMP message controller
-│   │   │   └── resources/
-│   │   │       ├── application.yml  # Application properties (environment variable driven)
-│   │   │       └── schema.sql       # PostgreSQL DDL migrations & indexes
-│   ├── .env.example                 # Safe template for local backend environment variables
-│   ├── DockerFile                   # Production container build definition
-│   └── pom.xml                      # Maven dependencies & build lifecycle
-├── frontend/
-│   ├── src/
-│   │   ├── components/              # Editor, Chat, Controls, HistoryModal, ActiveUsers
-│   │   ├── contexts/                # AuthContext (Clerk), WebSocketContext (STOMP)
-│   │   ├── pages/                   # Landing, Dashboard, Editor, Login, Register
-│   │   ├── services/                # Axios API instance and Yjs connection service
-│   │   ├── types/                   # TypeScript interfaces and language definitions
-│   │   └── App.tsx                  # Client router and route protection
-│   ├── .env.development            # Local development environment configuration
-│   ├── .env.production             # Production environment configuration
-│   ├── package.json                 # Node dependencies and build scripts
-│   ├── vite.config.ts               # Vite configuration with Tailwind CSS v4
-│   └── vercel.json                  # Single-Page Application rewrites for Vercel
-├── .gitignore                       # Multi-layer repository exclusion rules
-└── README.md                        # Project documentation
-```
-
----
-
-## 🚀 Local Development Setup
+## Local Development
 
 ### Prerequisites
-- **Java:** JDK 21+
-- **Maven:** Apache Maven 3.9+
-- **Node.js:** Node 18+ and npm
-- **Database:** A PostgreSQL instance (local or hosted on [Neon](https://neon.tech/))
-- **Clerk Account:** A free [Clerk](https://clerk.com/) application for authentication
+- JDK 21+
+- Apache Maven 3.9+
+- Node.js 18+ and npm
+- PostgreSQL database (local or Neon)
+- Clerk account with publishable key & JWKS URI
+- Google AI Studio API key (Gemini)
 
 ---
 
-### 1. Clone the Repository
+### Backend Setup
 
-```bash
-git clone https://github.com/Ayushpremrocks/CollabCode.git
-cd CollabCode
-```
-
----
-
-### 2. Backend Setup
-
-Spring Boot is configured to read local environment variables from `backend/.env` automatically during development using Spring's native `spring.config.import: "optional:file:.env[.properties]"` feature.
-
-1. Navigate to the backend directory:
+1. Navigate to `backend`:
    ```bash
    cd backend
    ```
-2. Copy the sample environment file:
+2. Copy the environment template:
    ```bash
    cp .env.example .env
    ```
-3. Open `backend/.env` and supply your development credentials:
-
+3. Populate `backend/.env` with your credentials:
    ```env
-   # PostgreSQL Connection (Neon or local)
    SPRING_DATASOURCE_URL=jdbc:postgresql://your-neon-host.neon.tech/neondb?sslmode=require
-   SPRING_DATASOURCE_USERNAME=your_database_username
-   SPRING_DATASOURCE_PASSWORD=your_database_password
-
-   # Clerk JWT Validation (From Clerk Dashboard -> API Keys -> JWKS URL)
-   CLERK_JWKS_URI=https://your-clerk-frontend-api.clerk.accounts.dev/.well-known/jwks.json
-
-   # Internal JWT Secret (Minimum 32-character random string)
-   JWT_SECRET=your_long_random_alphanumeric_jwt_secret_value
-
-   # Allowed CORS origins
+   SPRING_DATASOURCE_USERNAME=your_db_username
+   SPRING_DATASOURCE_PASSWORD=your_db_password
+   CLERK_JWKS_URI=https://your-clerk-app.clerk.accounts.dev/.well-known/jwks.json
+   JWT_SECRET=your_minimum_32_character_jwt_secret
    ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174
-
-   # SQL Schema Initialization (use 'always' on first run, 'never' afterwards)
    SPRING_SQL_INIT_MODE=always
+   GEMINI_API_KEY=your_gemini_api_key
    ```
+4. Run the Spring Boot application:
+   ```powershell
+   # Windows PowerShell
+   .\mvnw.cmd spring-boot:run
 
-4. Start the backend server:
-   ```bash
+   # Linux / macOS
+   ./mvnw spring-boot:run
+
+   # Or standard Maven
    mvn spring-boot:run
    ```
-   The backend will start at `http://localhost:8080`. The database tables from `schema.sql` will be verified or created automatically.
+   The backend will start at `http://localhost:8080`.
 
 ---
 
-### 3. Frontend Setup
+### Frontend Setup
 
-1. Open a new terminal and navigate to the frontend directory:
+1. Navigate to `frontend`:
    ```bash
    cd frontend
    ```
-2. Install npm dependencies:
+2. Install dependencies:
    ```bash
    npm install
    ```
-3. Verify your `frontend/.env.development` file contains your Clerk publishable key and local endpoint references:
+3. Verify `frontend/.env.development`:
    ```env
-   VITE_CLERK_PUBLISHABLE_KEY=pk_test_your_clerk_publishable_key
+   VITE_CLERK_PUBLISHABLE_KEY=pk_test_your_clerk_key
    VITE_API_BASE_URL=http://localhost:8080/api
    VITE_WS_BASE_URL=ws://localhost:8080
    ```
-4. Start the Vite development server:
+4. Start the development server:
    ```bash
    npm run dev
    ```
-5. Open your browser and navigate to `http://localhost:5173`.
+5. Open `http://localhost:5173` in your browser.
 
 ---
 
-## 🔐 Environment Variables
+## Environment Variables
 
-| Variable Name | Environment | Description |
-|---|---|---|
-| `SPRING_DATASOURCE_URL` | Backend | PostgreSQL JDBC connection URL |
-| `SPRING_DATASOURCE_USERNAME` | Backend | PostgreSQL database username |
-| `SPRING_DATASOURCE_PASSWORD` | Backend | PostgreSQL database password |
-| `CLERK_JWKS_URI` | Backend | Clerk `.well-known/jwks.json` endpoint URL |
-| `JWT_SECRET` | Backend | Application secret key for internal token management |
-| `ALLOWED_ORIGINS` | Backend | Comma-separated list of allowed CORS client origins |
-| `SPRING_SQL_INIT_MODE` | Backend | Database initialization mode (`always` or `never`) |
-| `PORT` | Backend | HTTP server port (automatically assigned by hosting platforms) |
-| `VITE_CLERK_PUBLISHABLE_KEY` | Frontend | Public Clerk API key for frontend authentication |
-| `VITE_API_BASE_URL` | Frontend | Base URL for REST API endpoints |
-| `VITE_WS_BASE_URL` | Frontend | Base URL for WebSocket connections (`ws://` or `wss://`) |
+### Frontend (`frontend/.env.*`)
 
-> **Security Notice:**
-> - `backend/.env` contains sensitive database and service secrets and **must never be committed to Git**.
-> - Both root and subfolder `.gitignore` files enforce exclusions for `.env` and `.env.*` files.
-> - `backend/.env.example` serves as a safe, secret-free template for tracking required environment variable keys.
-> - Frontend `VITE_*` variables are bundled into client-side JavaScript at build time. Never place private keys or backend database credentials in frontend environment files.
+| Variable | Description |
+|---|---|
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk public publishable key for user authentication |
+| `VITE_API_BASE_URL` | Base URL for REST API endpoints |
+| `VITE_WS_BASE_URL` | Base URL for WebSocket connections (`ws://` or `wss://`) |
 
----
+### Backend (`backend/.env` / Render Config)
 
-## 📡 REST API Reference
-
-All room-specific API requests require a valid Clerk session token passed via the `Authorization: Bearer <token>` header.
-
-| Method | Endpoint | Description | Auth Required |
-|---|---|---|:---:|
-| `POST` | `/api/rooms` | Create a new collaborative room | Yes |
-| `POST` | `/api/rooms/join` | Join an existing room via room code | Yes |
-| `GET` | `/api/rooms/{roomCode}` | Fetch room details, settings, and participant list | Yes |
-| `GET` | `/api/rooms` | List all rooms created or joined by current user | Yes |
-| `DELETE`| `/api/rooms/{roomCode}` | Permanently delete room (Host only) | Yes |
-| `PATCH` | `/api/rooms/{roomCode}/lock` | Toggle room join lock status (Host only) | Yes |
-| `GET` | `/api/rooms/{roomCode}/snapshots` | Retrieve snapshot revision history for a room | Yes |
-| `GET` | `/api/rooms/{roomCode}/snapshots/{id}` | Retrieve Base64 snapshot content for preview | Yes |
-| `POST` | `/api/rooms/{roomCode}/snapshots/{id}/restore` | Revert room document to a past snapshot (Host only) | Yes |
-| `POST` | `/api/rooms/execute` | Submit code for remote execution via Wandbox | Yes |
+| Variable | Description |
+|---|---|
+| `SPRING_DATASOURCE_URL` | PostgreSQL JDBC connection URL |
+| `SPRING_DATASOURCE_USERNAME` | Database username |
+| `SPRING_DATASOURCE_PASSWORD` | Database password |
+| `CLERK_JWKS_URI` | Clerk `.well-known/jwks.json` endpoint for JWT validation |
+| `GEMINI_API_KEY` | Google Gemini API key (backend-only, never logged or committed) |
+| `JWT_SECRET` | Secret key for internal token management |
+| `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins |
+| `SPRING_SQL_INIT_MODE` | SQL schema initialization mode (`always` or `never`) |
 
 ---
 
-## ⚡ WebSocket Protocols & Channels
+## Security
 
-| Path | Protocol | Purpose | Authentication |
-|---|---|---|---|
-| `/ws/yjs/{roomCode}` | Raw Binary WebSocket | High-speed binary Yjs CRDT document synchronization and snapshot persistence | Query param `?token=<jwt>` |
-| `/ws/stomp` | STOMP over WebSocket | Presence notifications, live chat, language switches, room locking | `CONNECT` frame header `Authorization: Bearer <jwt>` |
-
-### STOMP Messaging Topics & Destinations
-
-- **Client Send Destinations:**
-  - `/app/room/{roomCode}/join` — Register presence and fetch latest state
-  - `/app/room/{roomCode}/leave` — Announce departure from room
-  - `/app/room/{roomCode}/language` — Synchronize code language changes across all peers
-  - `/app/room/{roomCode}/readonly` — Toggle participant editing permissions (Host only)
-  - `/app/room/{roomCode}/chat` — Broadcast a chat message to the room
-- **Subscription Topics:**
-  - `/topic/room/{roomCode}/room-state` — Global room metadata updates
-  - `/topic/room/{roomCode}/user-joined` — Peer connection announcements
-  - `/topic/room/{roomCode}/language` — Broadcast language updates
-  - `/topic/room/{roomCode}/readonly` — Broadcast read-only state changes
-  - `/topic/room/{roomCode}/lock` — Broadcast room locked/unlocked alerts
-  - `/topic/room/{roomCode}/chat` — Real-time chat message stream
-  - `/topic/room/{roomCode}/room-deleted` — Host room deletion notification
+- **Backend-Only AI Secrets:** The `GEMINI_API_KEY` is loaded exclusively by Spring Boot via environment variables. It has no frontend equivalent (`no VITE_* var`), is never sent to the browser, and is excluded from logs.
+- **Git-Ignored Secrets:** `backend/.env` is tracked in `.gitignore` and never committed to version control. `backend/.env.example` provides a sanitized template.
+- **Authenticated Endpoints:** All `/api/agent/*` and `/api/rooms/*` endpoints require a valid Clerk JWT verified via cryptographic JWKS public keys.
+- **Atomic Document Updates:** Patches applied from the agent occur through transactional Yjs operations (`yText.doc.transact`), preventing race conditions.
 
 ---
 
-## 🌐 Production Deployment
+## Demo Walkthrough
 
-### Frontend (Vercel)
-1. Import the `frontend` folder into Vercel.
-2. In the project settings, configure the following **Environment Variables**:
-   - `VITE_CLERK_PUBLISHABLE_KEY`: Your production Clerk publishable key
-   - `VITE_API_BASE_URL`: `https://collabcode-lsor.onrender.com/api`
-   - `VITE_WS_BASE_URL`: `wss://collabcode-lsor.onrender.com`
-3. Build command: `npm run build`
-4. Output directory: `dist`
-5. The included `vercel.json` ensures all SPA routes route cleanly to `index.html`.
+Follow these steps to observe the end-to-end agentic workflow:
 
-### Backend (Render)
-1. Deploy the repository as a **Web Service** on Render using the included `backend/DockerFile`.
-2. Set the Root Directory to `backend` (or build from root referencing the Dockerfile).
-3. Under **Environment Variables**, configure:
-   - `SPRING_DATASOURCE_URL`: Production Neon database connection string
-   - `SPRING_DATASOURCE_USERNAME`: Production database username
-   - `SPRING_DATASOURCE_PASSWORD`: Production database password
-   - `CLERK_JWKS_URI`: `https://<your-clerk-domain>/.well-known/jwks.json`
-   - `JWT_SECRET`: Random 32+ character secret
-   - `ALLOWED_ORIGINS`: `https://collab-code-application.vercel.app`
-   - `SPRING_SQL_INIT_MODE`: `never` (since schema is already provisioned)
-4. Render automatically injects the `PORT` variable; Spring Boot binds to `${PORT:8080}`.
+1. **Sign In & Create Room:** Log in using Google via Clerk and create a new collaborative room from the dashboard.
+2. **Invite a Collaborator:** Open the room URL in a second browser window or share the 8-character code to observe real-time dual-cursor sync.
+3. **Select Language:** Switch language to **C++** using the language selector.
+4. **Introduce a Bug:** Paste the following syntax-broken code into the editor:
+   ```cpp
+   #include <iostream>
+
+   int main() {
+       std::cout << "Hello, World!" << std::endl
+       return 0;
+   }
+   ```
+5. **Run Code:** Click **Run Code** in Room Controls. Observe the output panel report a compilation error: `expected ';' before 'return'`.
+6. **Trigger AI Debug Agent:** In the right sidebar, expand the **AI Debug Agent** panel. Click **Debug with AI Agent**.
+7. **Observe Agent Execution:** The agent runs the code, captures the error, consults Gemini, extracts the patch, and re-executes the corrected code in Wandbox.
+8. **Inspect Verified Result:** Review the agent's explanation, the initial failure report, the verified sandbox execution (`Accepted`, exit code 0, output: `"Hello, World!"`), and toggle between Original and Fix views.
+9. **Approve the Fix:** Click **Approve & Apply**.
+10. **Observe Real-Time Sync:** The missing semicolon is applied atomically to the editor, immediately propagating to all collaborators via Yjs.
 
 ---
 
-## ⚠️ Known Limitations
+## Limitations
 
-- **Single-Node In-Memory Broker:** WebSocket sessions and presence tracking rely on Spring's in-memory message broker and concurrent collections. Horizontal scaling across multiple server instances requires a shared pub/sub relay (such as Redis or RabbitMQ).
-- **Public Compilation Service:** Remote code execution is powered by Wandbox's public compiler service, which imposes execution time limits and does not support persistent file I/O or multi-file project compilation.
-- **Render Free Tier Spin-Down:** On free-tier plans, services sleep after 15 minutes of zero traffic. Waking the instance introduces an initial cold-start latency.
+- **Language Execution Constraints:** Code execution is powered by Wandbox's public compiler runner, supporting 14 languages without persistent disk storage or multi-file project trees.
+- **Quota & Availability:** Gemini API response times depend on Google AI service availability and API tier quotas.
+- **Bounded Iteration Limit:** The agent loop is constrained to a maximum of 3 iterations (`MAX_ITERATIONS = 3`) to prevent infinite execution cycles and conserve API quota.
+- **Single Document Buffer:** Collaboration currently operates on a single Monaco editor buffer per room.
 
 ---
 
-## 🔮 Future Improvements
+## Hackathon Positioning
 
-- [ ] **Interactive Terminal:** Support interactive `stdin` streaming for console-driven applications.
-- [ ] **Multi-File Project Trees:** Expand from single-file rooms to full directory trees with file creation and deletion.
-- [ ] **Redis Pub/Sub Layer:** Enable clustering and horizontal scalability for WebSocket rooms across multiple backend nodes.
-- [ ] **Audio/Video Collaboration:** WebRTC-powered voice or video channels within active coding rooms.
-- [ ] **Git Repository Import:** One-click repository cloning directly into an active collaborative workspace.
+> "CollabCode uses an execution-feedback loop where an AI agent observes real program failures, proposes fixes, executes those fixes, evaluates the result, and iterates before presenting a verified change for human approval."
+
+CollabCode demonstrates that agentic AI is fundamentally different from code generation. By closing the loop between reasoning and real-world execution feedback while keeping the human firmly in control, CollabCode provides a reliable, trustworthy AI pair programmer for collaborative teams.
 
 ---
 

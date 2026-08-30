@@ -75,10 +75,10 @@ export function EditorPage() {
   // Feature 8: History
   const [showHistory, setShowHistory] = useState(false);
 
-  // AI Agent panel (Phase 1)
+  // AI Agent panel
   const [agentCollapsed, setAgentCollapsed] = useState(true);
 
-  // AI Debug Agent panel (Phase 2)
+  // AI Debug Agent panel
   const [debugCollapsed, setDebugCollapsed] = useState(false);
 
   // Feature 13: Font size
@@ -372,9 +372,9 @@ export function EditorPage() {
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Editor area */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <div className="flex-1 p-3 min-h-0">
             <CollaborativeEditor
               yText={yText}
@@ -399,7 +399,7 @@ export function EditorPage() {
         </div>
 
         {/* Right sidebar */}
-        <div className={`w-64 border-l ${isDark ? 'border-gray-800' : 'border-gray-200'} p-3 flex flex-col gap-3 overflow-y-auto shrink-0`}>
+        <div className={`w-64 border-l ${isDark ? 'border-gray-800' : 'border-gray-200'} p-3 flex flex-col gap-3 overflow-y-auto overflow-x-hidden h-full min-h-0 shrink-0`}>
           <RoomControls
             roomCode={roomCode || ''}
             roomName={room?.name || ''}
@@ -436,7 +436,7 @@ export function EditorPage() {
             unreadCount={unreadCount}
           />
 
-          {/* AI Agent — Phase 1 integration test panel */}
+          {/* AI Agent */}
           <AgentPanel
             currentCode={yText?.toString()}
             currentLanguage={activeLanguage}
@@ -444,7 +444,7 @@ export function EditorPage() {
             onToggle={() => setAgentCollapsed(prev => !prev)}
           />
 
-          {/* AI Debug Agent — Phase 2 agentic debugging loop */}
+          {/* AI Debug Agent */}
           <AgentDebugPanel
             yText={yText}
             currentCode={yText?.toString() ?? ''}

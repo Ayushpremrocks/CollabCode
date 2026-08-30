@@ -4,20 +4,18 @@ import { agentService } from '../services/agentService';
 import type { AgentDebugResponse } from '../types';
 
 /**
- * AgentDebugPanel — Phase 2 agentic debugging UI.
+ * AgentDebugPanel — autonomous AI debugging agent UI.
  *
- * Workflow (mirrors the backend loop):
+ * Workflow:
  *   1. User clicks "Debug with AI Agent"
- *   2. Panel shows live status as backend runs: inspect → Gemini → verify
- *   3. Agent returns: reasoning + proposed fix + execution results
- *   4. User sees a side-by-side diff (original vs proposed)
- *   5. User must click Approve or Reject
- *   6. On Approve: patch applied to the shared Yjs Y.Text atomically
- *   7. On Reject: nothing changes, panel resets
- *
- * The Yjs Y.Text is the SAME object used by CollaborativeEditor (monaco key).
- * Applying the patch here is equivalent to a human typing the fix — Yjs
- * propagates the change to all connected peers automatically.
+ *   2. Backend executes original code via Wandbox to observe compiler/runtime errors
+ *   3. Gemini reasons about the error and proposes a corrected full implementation
+ *   4. Backend executes the proposed fix via Wandbox to verify it resolves the failure
+ *   5. Backend iterates if still failing (up to configured max iterations)
+ *   6. User reviews the verified fix, reasoning, execution diff, and side-by-side comparison
+ *   7. Human approval gate: User clicks Approve or Reject
+ *   8. On Approve: patch is applied to the shared Yjs Y.Text atomically, syncing to all peers
+ *   9. On Reject: code remains untouched
  */
 
 interface AgentDebugPanelProps {
@@ -185,9 +183,6 @@ export function AgentDebugPanel({
             <path d="M12 2v2" strokeLinecap="round" />
           </svg>
           AI Debug Agent
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30">
-            Phase 2
-          </span>
           {agentState === 'running' && (
             <span className="w-2.5 h-2.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
           )}
@@ -206,8 +201,8 @@ export function AgentDebugPanel({
           {/* ── Idle / hint input ── */}
           {(agentState === 'idle' || agentState === 'error') && (
             <>
-              <p className="text-[11px] text-gray-500 pt-2">
-                The agent will run your code, ask Gemini to fix it, verify the fix, and ask for your approval before touching the editor.
+              <p className="text-[11px] text-gray-400 pt-2 leading-relaxed">
+                Automatically diagnose, fix, and verify code errors with execution feedback before applying changes.
               </p>
 
               <div className="relative">
