@@ -24,7 +24,21 @@ public class ClerkJwtValidator {
     private final JwtDecoder jwtDecoder;
 
     public ClerkJwtValidator(@Value("${app.clerk.jwks-uri}") String jwksUri) {
-        this.jwtDecoder = NimbusJwtDecoder.withJwkSetUri(jwksUri).build();
+        log.info("[ClerkJwtValidator] Initialization started.");
+        log.info("[ClerkJwtValidator] CLERK_JWKS_URI is {}.",
+                (jwksUri != null && !jwksUri.isBlank()) ? "present" : "MISSING or blank");
+        JwtDecoder decoder;
+        try {
+            decoder = NimbusJwtDecoder.withJwkSetUri(jwksUri).build();
+            log.info("[ClerkJwtValidator] NimbusJwtDecoder built successfully.");
+        } catch (Exception e) {
+            log.error("[ClerkJwtValidator] Failed to build NimbusJwtDecoder.");
+            log.error("[ClerkJwtValidator] Exception class   : {}", e.getClass().getName());
+            log.error("[ClerkJwtValidator] Exception message : {}", e.getMessage());
+            log.error("[ClerkJwtValidator] Full stack trace  :", e);
+            throw e; // re-throw so Spring context fails fast with a clear cause
+        }
+        this.jwtDecoder = decoder;
     }
 
     /**
