@@ -1,4 +1,5 @@
 
+import { useState } from 'react';
 import type { UserPresence } from '../types';
 
 interface ActiveUsersPanelProps {
@@ -27,16 +28,35 @@ function getAvatarColor(username: string): string {
 }
 
 export function ActiveUsersPanel({ users, currentUsername }: ActiveUsersPanelProps) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-2 h-2 bg-emerald-400 rounded-full" />
-        <h3 className="text-sm font-medium text-gray-300">
-          Active Users ({users.length})
-        </h3>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-emerald-400 rounded-full" />
+          <h3 className="text-sm font-medium text-gray-300">
+            Active Users ({users.length})
+          </h3>
+        </div>
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="text-gray-400 hover:text-white p-1 hover:bg-gray-800 rounded transition-colors"
+          title={isCollapsed ? "Expand active users" : "Collapse active users"}
+        >
+          <svg
+            className={`w-4 h-4 transition-transform ${isCollapsed ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
       </div>
 
-      <div className="space-y-2">
+      {!isCollapsed && (
+        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
         {users.length === 0 ? (
           <p className="text-xs text-gray-500">No users connected</p>
         ) : (
@@ -75,6 +95,7 @@ export function ActiveUsersPanel({ users, currentUsername }: ActiveUsersPanelPro
           })
         )}
       </div>
+      )}
     </div>
   );
 }

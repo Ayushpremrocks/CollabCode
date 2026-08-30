@@ -57,6 +57,7 @@ export function DashboardPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deletingCode, setDeletingCode] = useState<string | null>(null);
   const [flashMessage, setFlashMessage] = useState('');
+  const [creatingRoom, setCreatingRoom] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAuthenticated } = useAuth();
@@ -91,8 +92,10 @@ export function DashboardPage() {
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (creatingRoom) return;
     setError('');
     if (!newRoomName.trim()) return;
+    setCreatingRoom(true);
     try {
       const room = await roomService.createRoom({ name: newRoomName.trim() });
       setNewRoomName('');
@@ -101,6 +104,7 @@ export function DashboardPage() {
       const error = err as { response?: { status?: number; data?: { error?: string } } };
       console.error('[CreateRoom] Status:', error.response?.status, 'Data:', JSON.stringify(error.response?.data));
       setError(error.response?.data?.error || `Failed to create room (HTTP ${error.response?.status ?? 'network error'})`);
+      setCreatingRoom(false);
     }
   };
 
@@ -187,13 +191,22 @@ export function DashboardPage() {
                 placeholder="Room name"
                 required
                 maxLength={100}
+                disabled={creatingRoom}
                 className={`flex-1 border rounded-lg px-3.5 py-2 text-sm focus:outline-none transition-all ${inputCls}`}
               />
               <button
                 type="submit"
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
+                disabled={creatingRoom || !newRoomName.trim()}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap disabled:opacity-50 flex items-center gap-1.5"
               >
-                Create
+                {creatingRoom ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  'Create'
+                )}
               </button>
             </form>
           </div>
@@ -243,7 +256,9 @@ export function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {rooms.map((room) => {
-                const isOwner = room.ownerUsername === user?.username;
+                const isOwner = (room.ownerClerkId && user?.clerkUserId)
+                  ? room.ownerClerkId === user.clerkUserId
+                  : room.ownerUsername === user?.username;
                 const expiry = formatExpiry(room.expiresAt);
 
                 return (

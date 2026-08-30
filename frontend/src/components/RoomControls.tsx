@@ -48,6 +48,8 @@ export function RoomControls({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   const currentConfig = LANGUAGE_CONFIG[language];
 
   const filteredLanguages = Object.entries(LANGUAGE_CONFIG).filter(([, config]) =>
@@ -93,20 +95,39 @@ export function RoomControls({
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-4">
       {/* Room Info */}
-      <div>
-        <h2 className="text-base font-semibold text-white truncate">{roomName}</h2>
-        <div className="flex items-center gap-2 mt-1">
-          <div className={`w-2 h-2 rounded-full ${connected ? 'bg-emerald-400' : 'bg-red-400'}`} />
-          <span className="text-xs text-gray-400">
-            {connected ? 'Connected' : 'Reconnecting...'}
-          </span>
-          {isHost && (
-            <span className="text-xs bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-medium">
-              Host
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-white truncate">{roomName}</h2>
+          <div className="flex items-center gap-2 mt-1">
+            <div className={`w-2 h-2 rounded-full ${connected ? 'bg-emerald-400' : 'bg-red-400'}`} />
+            <span className="text-xs text-gray-400">
+              {connected ? 'Connected' : 'Reconnecting...'}
             </span>
-          )}
+            {isHost && (
+              <span className="text-xs bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-medium">
+                Host
+              </span>
+            )}
+          </div>
         </div>
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="text-gray-400 hover:text-white p-1 hover:bg-gray-800 rounded transition-colors"
+          title={isCollapsed ? "Expand panel" : "Collapse panel"}
+        >
+          <svg
+            className={`w-4 h-4 transition-transform ${isCollapsed ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
       </div>
+
+      {!isCollapsed && (
+        <div className="space-y-4">
 
       {/* Room Code */}
       <div>
@@ -342,6 +363,8 @@ export function RoomControls({
       >
         Leave Room
       </button>
+      </div>
+      )}
     </div>
   );
 }
