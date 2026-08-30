@@ -113,6 +113,40 @@ export interface ExecuteCodeResponse {
   memory: number | null;
 }
 
+/** Sent to POST /api/agent/debug */
+export interface AgentDebugRequest {
+  code: string;
+  language: string;
+  errorContext?: string;
+}
+
+/**
+ * Returned by POST /api/agent/debug.
+ * proposedFix must be shown to the user for approval before being applied.
+ */
+export interface AgentDebugResponse {
+  originalCode: string;
+  proposedFix: string | null;
+  reasoning: string | null;
+
+  // Initial run (original code)
+  initialStatus: string | null;
+  initialStdout: string | null;
+  initialStderr: string | null;
+  initialCompileOutput: string | null;
+
+  // Verification run (proposed fix)
+  verificationStatus: string | null;
+  verificationStatusId: number | null;
+  verificationStdout: string | null;
+  verificationStderr: string | null;
+  verificationCompileOutput: string | null;
+
+  iterations: number;
+  success: boolean;
+  agentError: string | null;
+}
+
 export interface LineAuthorInfo {
   username: string;
   color: string;

@@ -7,6 +7,7 @@ import { RoomControls } from '../components/RoomControls';
 import { OutputPanel } from '../components/OutputPanel';
 import { ChatPanel } from '../components/ChatPanel';
 import { AgentPanel } from '../components/AgentPanel';
+import { AgentDebugPanel } from '../components/AgentDebugPanel';
 import { HistoryModal } from '../components/HistoryModal';
 import { useCollaboration } from '../hooks/useCollaboration';
 import { usePresence } from '../hooks/usePresence';
@@ -76,6 +77,9 @@ export function EditorPage() {
 
   // AI Agent panel (Phase 1)
   const [agentCollapsed, setAgentCollapsed] = useState(true);
+
+  // AI Debug Agent panel (Phase 2)
+  const [debugCollapsed, setDebugCollapsed] = useState(false);
 
   // Feature 13: Font size
   const [fontSize, setFontSize] = useState<number>(() => {
@@ -438,6 +442,15 @@ export function EditorPage() {
             currentLanguage={activeLanguage}
             isCollapsed={agentCollapsed}
             onToggle={() => setAgentCollapsed(prev => !prev)}
+          />
+
+          {/* AI Debug Agent — Phase 2 agentic debugging loop */}
+          <AgentDebugPanel
+            yText={yText}
+            currentCode={yText?.toString() ?? ''}
+            currentLanguage={activeLanguage}
+            isCollapsed={debugCollapsed}
+            onToggle={() => setDebugCollapsed(prev => !prev)}
           />
         </div>
       </div>
