@@ -1,7 +1,6 @@
 # === Project-specific exclusions ===
-# Sensitive config (contains DB credentials, secrets)
-**/application.yml
-**/application.yaml
+# application.yml is committed — all secrets are injected via environment variables.
+# application.yml.example is a safe template and is also committed.
 
 # Documentation (internal only)
 docs/
