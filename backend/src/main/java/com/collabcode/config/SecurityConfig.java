@@ -1,5 +1,7 @@
 package com.collabcode.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,6 +35,8 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
+
     @Value("${app.cors.allowed-origins}")
     private String allowedOrigins;
 
@@ -41,6 +45,9 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        log.info("[SecurityConfig] securityFilterChain bean initialization started.");
+
+        log.info("[SecurityConfig] Configuring CORS, CSRF, session management...");
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
@@ -51,12 +58,19 @@ public class SecurityConfig {
                         // actual auth happens inside the WS handlers
                         .requestMatchers("/ws/**").permitAll()
                         .anyRequest().authenticated()
-                )
-                .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.decoder(jwtDecoder()))
                 );
+        log.info("[SecurityConfig] CORS/CSRF/session/authz configured.");
 
-        return http.build();
+        log.info("[SecurityConfig] Configuring oauth2ResourceServer (will call jwtDecoder())...");
+        http.oauth2ResourceServer(oauth2 ->
+                oauth2.jwt(jwt -> jwt.decoder(jwtDecoder()))
+        );
+        log.info("[SecurityConfig] oauth2ResourceServer configured.");
+
+        log.info("[SecurityConfig] Calling http.build()...");
+        SecurityFilterChain chain = http.build();
+        log.info("[SecurityConfig] http.build() completed. SecurityFilterChain ready.");
+        return chain;
     }
 
     /**
@@ -65,17 +79,36 @@ public class SecurityConfig {
      */
     @Bean
     public JwtDecoder jwtDecoder() {
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(clerkJwksUri).build();
+        log.info("[SecurityConfig] jwtDecoder() called. CLERK_JWKS_URI is {}.",
+                (clerkJwksUri != null && !clerkJwksUri.isBlank()) ? "present" : "MISSING or blank");
+
+        NimbusJwtDecoder decoder;
+        try {
+            log.info("[SecurityConfig] Calling NimbusJwtDecoder.withJwkSetUri(...).build() — this may make a network call...");
+            decoder = NimbusJwtDecoder.withJwkSetUri(clerkJwksUri).build();
+            log.info("[SecurityConfig] NimbusJwtDecoder.build() completed successfully.");
+        } catch (Exception e) {
+            log.error("[SecurityConfig] NimbusJwtDecoder.build() FAILED.");
+            log.error("[SecurityConfig] Exception class   : {}", e.getClass().getName());
+            log.error("[SecurityConfig] Exception message : {}", e.getMessage());
+            log.error("[SecurityConfig] Full stack trace  :", e);
+            throw e;
+        }
+
         // Use only expiry validation — Clerk signs with RS256 via JWKS (signature already proven).
         // Skip issuer validation so both standard Clerk session tokens and custom JWT templates
         // (which may have a different issuer format) are accepted without extra configuration.
+        log.info("[SecurityConfig] Setting JWT validator (expiry-only, no issuer check)...");
         OAuth2TokenValidator<Jwt> expiryValidator = JwtValidators.createDefault();
         decoder.setJwtValidator(expiryValidator);
+        log.info("[SecurityConfig] jwtDecoder() bean fully initialized.");
         return decoder;
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+        log.info("[SecurityConfig] corsConfigurationSource() initializing. Allowed origins count: {}.",
+                allowedOrigins != null ? allowedOrigins.split(",").length : 0);
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(allowedOrigins.split(",")));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
@@ -85,6 +118,7 @@ public class SecurityConfig {
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
+        log.info("[SecurityConfig] corsConfigurationSource() ready.");
         return source;
     }
 }
