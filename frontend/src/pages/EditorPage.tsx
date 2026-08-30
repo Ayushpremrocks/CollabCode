@@ -6,6 +6,7 @@ import { ActiveUsersPanel } from '../components/ActiveUsersPanel';
 import { RoomControls } from '../components/RoomControls';
 import { OutputPanel } from '../components/OutputPanel';
 import { ChatPanel } from '../components/ChatPanel';
+import { AgentPanel } from '../components/AgentPanel';
 import { HistoryModal } from '../components/HistoryModal';
 import { useCollaboration } from '../hooks/useCollaboration';
 import { usePresence } from '../hooks/usePresence';
@@ -72,6 +73,9 @@ export function EditorPage() {
 
   // Feature 8: History
   const [showHistory, setShowHistory] = useState(false);
+
+  // AI Agent panel (Phase 1)
+  const [agentCollapsed, setAgentCollapsed] = useState(true);
 
   // Feature 13: Font size
   const [fontSize, setFontSize] = useState<number>(() => {
@@ -426,6 +430,14 @@ export function EditorPage() {
             isCollapsed={chatCollapsed}
             onToggle={handleChatToggle}
             unreadCount={unreadCount}
+          />
+
+          {/* AI Agent — Phase 1 integration test panel */}
+          <AgentPanel
+            currentCode={yText?.toString()}
+            currentLanguage={activeLanguage}
+            isCollapsed={agentCollapsed}
+            onToggle={() => setAgentCollapsed(prev => !prev)}
           />
         </div>
       </div>

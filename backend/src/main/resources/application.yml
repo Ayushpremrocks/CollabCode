@@ -38,3 +38,8 @@ app:
 
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174,https://collab-code-application.vercel.app}
+
+  gemini:
+    # Loaded from GEMINI_API_KEY env var (backend/.env locally, Render env var in production).
+    # NEVER expose this to the frontend. No VITE_ equivalent should ever exist.
+    api-key: ${GEMINI_API_KEY:}
