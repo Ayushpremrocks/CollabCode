@@ -35,7 +35,7 @@ export function ActiveUsersPanel({ users, currentUsername }: ActiveUsersPanelPro
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 bg-emerald-400 rounded-full" />
-          <h3 className="text-sm font-medium text-gray-300">
+          <h3 className="text-xs font-medium text-gray-300">
             Active Users ({users.length})
           </h3>
         </div>
@@ -82,10 +82,10 @@ export function ActiveUsersPanel({ users, currentUsername }: ActiveUsersPanelPro
                 )}
                 
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-200 truncate">
+                  <p className="text-xs text-gray-200 truncate">
                     {displayName}
                     {user.username === currentUsername && (
-                      <span className="text-gray-500 text-xs ml-1">(you)</span>
+                      <span className="text-gray-500 text-[10px] ml-1">(you)</span>
                     )}
                   </p>
                 </div>

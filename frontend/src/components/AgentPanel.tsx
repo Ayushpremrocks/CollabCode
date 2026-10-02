@@ -85,7 +85,7 @@ export function AgentPanel({
         className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-800/60 transition-colors text-left"
         aria-expanded={!isCollapsed}
       >
-        <span className="flex items-center gap-2 text-sm font-semibold text-violet-400">
+        <span className="flex items-center gap-2 text-xs font-semibold text-violet-400">
           {/* Sparkle icon */}
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2l2.09 6.26L20 9.27l-4.95 3.84 1.89 6.27L12 16.12l-4.94 3.26 1.89-6.27L4 9.27l5.91-1.01z" />
@@ -103,7 +103,7 @@ export function AgentPanel({
       {!isCollapsed && (
         <div className="px-3 pb-3 space-y-2 border-t border-gray-800/60">
           {/* Description */}
-          <p className="text-[11px] text-gray-400 pt-2 leading-relaxed">
+          <p className="text-[10px] text-gray-400 pt-2 leading-relaxed">
             Ask Gemini about your code, explain errors, and get coding guidance.
           </p>
 

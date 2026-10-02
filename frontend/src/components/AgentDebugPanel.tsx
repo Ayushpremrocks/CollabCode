@@ -173,7 +173,7 @@ export function AgentDebugPanel({
         className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-800/60 transition-colors text-left"
         aria-expanded={!isCollapsed}
       >
-        <span className="flex items-center gap-2 text-sm font-semibold text-violet-400">
+        <span className="flex items-center gap-2 text-xs font-semibold text-violet-400">
           {/* Robot/agent icon */}
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
             <rect x="3" y="11" width="18" height="11" rx="2" />
@@ -201,7 +201,7 @@ export function AgentDebugPanel({
           {/* ── Idle / hint input ── */}
           {(agentState === 'idle' || agentState === 'error') && (
             <>
-              <p className="text-[11px] text-gray-400 pt-2 leading-relaxed">
+              <p className="text-[10px] text-gray-400 pt-2 leading-relaxed">
                 Automatically diagnose, fix, and verify code errors with execution feedback before applying changes.
               </p>
 

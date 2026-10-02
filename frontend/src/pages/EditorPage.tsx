@@ -67,6 +67,11 @@ export function EditorPage() {
   const [execResult, setExecResult] = useState<ExecuteCodeResponse | null>(null);
   const [isRunning, setIsRunning] = useState(false);
 
+  // Phase 5/6: Standard input — LOCAL per user, intentionally NOT shared via Yjs.
+  // Rationale: stdin is per-execution. Syncing it would create race conditions
+  // when multiple users run code simultaneously with different inputs.
+  const [stdin, setStdin] = useState('');
+
   // Feature 7: Chat
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatCollapsed, setChatCollapsed] = useState(true);
@@ -230,7 +235,7 @@ export function EditorPage() {
     }
   }, [roomCode, navigate]);
 
-  // Feature 5: Run code
+  // Feature 5: Run code — passes stdin (Phase 5: local per user)
   const handleRunCode = useCallback(async () => {
     if (!language) return;
     const code = yText.toString();
@@ -238,7 +243,7 @@ export function EditorPage() {
     setShowOutput(true);
     setExecResult(null);
     try {
-      const result = await executionService.executeCode({ code, language });
+      const result = await executionService.executeCode({ code, language, stdin: stdin || '' });
       setExecResult(result);
     } catch (e) {
       setExecResult({
@@ -253,7 +258,7 @@ export function EditorPage() {
     } finally {
       setIsRunning(false);
     }
-  }, [language, yText]);
+  }, [language, yText, stdin]);
 
   // Feature 10: Download
   const handleDownload = useCallback(() => {
@@ -321,12 +326,12 @@ export function EditorPage() {
   }
 
   return (
-    <div className={`h-screen flex flex-col ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`}>
+    <div className={`h-screen flex flex-col overflow-hidden ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`}>
       <Navbar />
 
       {/* Feature 9: Expiry warning */}
       {expiryWarning && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center gap-2 shrink-0">
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 flex items-center gap-2 shrink-0">
           <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
@@ -338,7 +343,7 @@ export function EditorPage() {
 
       {/* Feature 6: Read-only banner */}
       {isReadOnly && !isHost && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center gap-2 shrink-0">
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 flex items-center gap-2 shrink-0">
           <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
@@ -350,7 +355,7 @@ export function EditorPage() {
 
       {/* Room locked banner */}
       {isRoomLocked && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center gap-2 shrink-0">
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 flex items-center gap-2 shrink-0">
           <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
@@ -362,7 +367,7 @@ export function EditorPage() {
 
       {/* Feature 2: Room deleted notification */}
       {deletedMessage && (
-        <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-2 flex items-center justify-between shrink-0">
+        <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-1.5 flex items-center justify-between shrink-0">
           <span className="text-red-400 text-xs font-medium">{deletedMessage}</span>
           <button onClick={() => setDeletedMessage('')} className="text-red-400 hover:text-red-300">
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -372,10 +377,20 @@ export function EditorPage() {
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* Editor area */}
-        <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          <div className="flex-1 p-3 min-h-0">
+      {/*
+        Phase 4: Responsive layout — row on lg+ (desktop/laptop), column on smaller.
+        flex-1 + overflow-hidden: workspace fills viewport height, page never scrolls.
+      */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
+
+        {/* ── Left column: Editor + Stdin + Output ── */}
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+
+          {/*
+            Phase 1: flex-1 + min-h-0 lets the editor shrink when the stdin area
+            and output panel are open, giving a balanced IDE-like layout.
+          */}
+          <div className="flex-1 p-2 min-h-0 overflow-hidden">
             <CollaborativeEditor
               yText={yText}
               language={activeLanguage}
@@ -385,6 +400,35 @@ export function EditorPage() {
               theme={isDark ? 'vs-dark' : 'vs'}
               currentUsername={user?.username || ''}
               activeUsers={activeUsers}
+            />
+          </div>
+
+          {/*
+            Phase 6: Standard Input textarea.
+            Phase 7: stdin is LOCAL — each user types their own input before
+            clicking Run. It is NOT synced through Yjs. Shared collaborative
+            state remains: code content, presence, chat, and room state.
+          */}
+          <div className={`shrink-0 border-t ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-gray-50'} px-3 py-2`}>
+            <label
+              htmlFor="stdin-input"
+              className={`text-[11px] font-semibold uppercase tracking-wide block mb-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}
+            >
+              Standard Input
+            </label>
+            <textarea
+              id="stdin-input"
+              value={stdin}
+              onChange={e => setStdin(e.target.value)}
+              placeholder="Type program input here before running… (e.g. 10 20)"
+              rows={2}
+              className={`w-full text-xs font-mono rounded border px-2.5 py-1.5 resize-none focus:outline-none transition-colors
+                ${
+                  isDark
+                    ? 'bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-600 focus:border-indigo-500'
+                    : 'bg-white border-gray-300 text-gray-800 placeholder-gray-400 focus:border-indigo-400'
+                }`}
+              style={{ minHeight: '44px', maxHeight: '100px' }}
             />
           </div>
 
@@ -398,60 +442,78 @@ export function EditorPage() {
           )}
         </div>
 
-        {/* Right sidebar */}
-        <div className={`w-64 border-l ${isDark ? 'border-gray-800' : 'border-gray-200'} p-3 flex flex-col gap-3 overflow-y-auto overflow-x-hidden h-full min-h-0 shrink-0`}>
-          <RoomControls
-            roomCode={roomCode || ''}
-            roomName={room?.name || ''}
-            language={activeLanguage}
-            connected={yjsConnected}
-            isHost={isHost}
-            isReadOnly={isReadOnly}
-            isRoomLocked={isRoomLocked}
-            fontSize={fontSize}
-            onLanguageChange={handleLanguageChange}
-            onLeaveRoom={handleLeaveRoom}
-            onToggleReadOnly={handleToggleReadOnly}
-            onToggleRoomLock={handleToggleRoomLock}
-            onDeleteRoom={handleDeleteRoom}
-            onRunCode={handleRunCode}
-            onDownload={handleDownload}
-            onShowHistory={() => setShowHistory(true)}
-            onFontSizeChange={handleFontSizeChange}
-            isRunning={isRunning}
-          />
+        {/*
+          Phase 3: Right sidebar — independently scrollable.
+          Phase 4: Full width below editor on small screens; 256px alongside on lg+.
 
-          <ActiveUsersPanel
-            users={activeUsers}
-            currentUsername={user?.username || ''}
-          />
+          Critical rules:
+          - lg:h-full     → fills the flex-row height on desktop
+          - max-h-[45vh]  → caps mobile height so editor stays usable
+          - overflow-y-auto → creates its own scroll context (AI Agent reachable)
+          - min-h-0       → flex child can shrink correctly
+        */}
+        <div className={`
+          w-full lg:w-64 xl:w-72 shrink-0
+          lg:h-full max-h-[45vh] lg:max-h-none
+          border-t lg:border-t-0 lg:border-l
+          ${isDark ? 'border-gray-800' : 'border-gray-200'}
+          overflow-y-auto overflow-x-hidden
+          min-h-0
+        `}>
+          <div className="flex flex-col gap-2.5 p-2.5">
+            <RoomControls
+              roomCode={roomCode || ''}
+              roomName={room?.name || ''}
+              language={activeLanguage}
+              connected={yjsConnected}
+              isHost={isHost}
+              isReadOnly={isReadOnly}
+              isRoomLocked={isRoomLocked}
+              fontSize={fontSize}
+              onLanguageChange={handleLanguageChange}
+              onLeaveRoom={handleLeaveRoom}
+              onToggleReadOnly={handleToggleReadOnly}
+              onToggleRoomLock={handleToggleRoomLock}
+              onDeleteRoom={handleDeleteRoom}
+              onRunCode={handleRunCode}
+              onDownload={handleDownload}
+              onShowHistory={() => setShowHistory(true)}
+              onFontSizeChange={handleFontSizeChange}
+              isRunning={isRunning}
+            />
 
-          {/* Feature 7: Chat */}
-          <ChatPanel
-            messages={chatMessages}
-            currentUsername={user?.username || ''}
-            onSend={handleSendChat}
-            isCollapsed={chatCollapsed}
-            onToggle={handleChatToggle}
-            unreadCount={unreadCount}
-          />
+            <ActiveUsersPanel
+              users={activeUsers}
+              currentUsername={user?.username || ''}
+            />
 
-          {/* AI Agent */}
-          <AgentPanel
-            currentCode={yText?.toString()}
-            currentLanguage={activeLanguage}
-            isCollapsed={agentCollapsed}
-            onToggle={() => setAgentCollapsed(prev => !prev)}
-          />
+            {/* Feature 7: Chat */}
+            <ChatPanel
+              messages={chatMessages}
+              currentUsername={user?.username || ''}
+              onSend={handleSendChat}
+              isCollapsed={chatCollapsed}
+              onToggle={handleChatToggle}
+              unreadCount={unreadCount}
+            />
 
-          {/* AI Debug Agent */}
-          <AgentDebugPanel
-            yText={yText}
-            currentCode={yText?.toString() ?? ''}
-            currentLanguage={activeLanguage}
-            isCollapsed={debugCollapsed}
-            onToggle={() => setDebugCollapsed(prev => !prev)}
-          />
+            {/* AI Agent */}
+            <AgentPanel
+              currentCode={yText?.toString()}
+              currentLanguage={activeLanguage}
+              isCollapsed={agentCollapsed}
+              onToggle={() => setAgentCollapsed(prev => !prev)}
+            />
+
+            {/* AI Debug Agent */}
+            <AgentDebugPanel
+              yText={yText}
+              currentCode={yText?.toString() ?? ''}
+              currentLanguage={activeLanguage}
+              isCollapsed={debugCollapsed}
+              onToggle={() => setDebugCollapsed(prev => !prev)}
+            />
+          </div>
         </div>
       </div>
 
@@ -462,7 +524,6 @@ export function EditorPage() {
           isHost={isHost}
           onClose={() => setShowHistory(false)}
           onRestored={() => {
-            // Reload the page to get the restored document
             window.location.reload();
           }}
         />

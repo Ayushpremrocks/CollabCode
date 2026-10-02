@@ -97,14 +97,14 @@ export function RoomControls({
       {/* Room Info */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-white truncate">{roomName}</h2>
+          <h2 className="text-sm font-semibold text-white truncate">{roomName}</h2>
           <div className="flex items-center gap-2 mt-1">
             <div className={`w-2 h-2 rounded-full ${connected ? 'bg-emerald-400' : 'bg-red-400'}`} />
-            <span className="text-xs text-gray-400">
+            <span className="text-[10px] text-gray-400">
               {connected ? 'Connected' : 'Reconnecting...'}
             </span>
             {isHost && (
-              <span className="text-xs bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-medium">
+              <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-medium">
                 Host
               </span>
             )}
@@ -131,9 +131,9 @@ export function RoomControls({
 
       {/* Room Code */}
       <div>
-        <label className="text-xs text-gray-500 block mb-1">Room Code</label>
+        <label className="text-[10px] text-gray-500 block mb-1">Room Code</label>
         <div className="flex items-center gap-2">
-          <code className="flex-1 bg-gray-800 text-indigo-400 text-sm px-3 py-1.5 rounded font-mono tracking-wider truncate">
+          <code className="flex-1 bg-gray-800 text-indigo-400 text-xs px-3 py-1.5 rounded font-mono tracking-wider truncate">
             {roomCode}
           </code>
           <button
@@ -156,10 +156,10 @@ export function RoomControls({
 
       {/* Language Selector — Searchable */}
       <div ref={dropdownRef} className="relative">
-        <label className="text-xs text-gray-500 block mb-1">Language</label>
+        <label className="text-[10px] text-gray-500 block mb-1">Language</label>
         <button
           onClick={() => setDropdownOpen(!dropdownOpen)}
-          className="w-full flex items-center gap-2 bg-gray-800 text-gray-200 text-sm px-3 py-1.5 rounded border border-gray-700 hover:border-indigo-500 focus:border-indigo-500 focus:outline-none transition-colors"
+          className="w-full flex items-center gap-2 bg-gray-800 text-gray-200 text-xs px-3 py-1.5 rounded border border-gray-700 hover:border-indigo-500 focus:border-indigo-500 focus:outline-none transition-colors"
         >
           <span>{currentConfig.icon}</span>
           <span className="flex-1 text-left">{currentConfig.label}</span>
@@ -214,7 +214,7 @@ export function RoomControls({
 
       {/* Font Size Control */}
       <div>
-        <label className="text-xs text-gray-500 block mb-1">Font Size</label>
+        <label className="text-[10px] text-gray-500 block mb-1">Font Size</label>
         <div className="flex items-center gap-2">
           <button
             onClick={() => onFontSizeChange(Math.max(12, fontSize - 1))}
@@ -223,7 +223,7 @@ export function RoomControls({
           >
             −
           </button>
-          <span className="flex-1 text-center text-sm text-gray-300 font-mono">{fontSize}px</span>
+          <span className="flex-1 text-center text-xs text-gray-300 font-mono">{fontSize}px</span>
           <button
             onClick={() => onFontSizeChange(Math.min(24, fontSize + 1))}
             disabled={fontSize >= 24}
@@ -241,7 +241,7 @@ export function RoomControls({
           <button
             onClick={onRunCode}
             disabled={isRunning}
-            className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white text-sm font-medium py-2 rounded-lg transition-colors"
+            className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white text-xs font-medium py-1.5 rounded-lg transition-colors"
           >
             {isRunning ? (
               <>
@@ -263,7 +263,7 @@ export function RoomControls({
         {/* Download */}
         <button
           onClick={onDownload}
-          className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm py-2 rounded-lg transition-colors border border-gray-700"
+          className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs py-1.5 rounded-lg transition-colors border border-gray-700"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -274,7 +274,7 @@ export function RoomControls({
         {/* History */}
         <button
           onClick={onShowHistory}
-          className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm py-2 rounded-lg transition-colors border border-gray-700"
+          className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs py-1.5 rounded-lg transition-colors border border-gray-700"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -286,7 +286,7 @@ export function RoomControls({
         {isHost && (
           <button
             onClick={onToggleReadOnly}
-            className={`w-full flex items-center justify-center gap-2 text-sm py-2 rounded-lg transition-colors border ${
+            className={`w-full flex items-center justify-center gap-2 text-xs py-1.5 rounded-lg transition-colors border ${
               isReadOnly
                 ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
                 : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
@@ -314,7 +314,7 @@ export function RoomControls({
         {isHost && onToggleRoomLock && (
           <button
             onClick={onToggleRoomLock}
-            className={`w-full flex items-center justify-center gap-2 text-sm py-2 rounded-lg transition-colors border ${
+            className={`w-full flex items-center justify-center gap-2 text-xs py-1.5 rounded-lg transition-colors border ${
               isRoomLocked
                 ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
                 : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
@@ -346,7 +346,7 @@ export function RoomControls({
                 onDeleteRoom();
               }
             }}
-            className="w-full flex items-center justify-center gap-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 text-sm py-2 rounded-lg transition-colors border border-red-900/50 mt-4"
+            className="w-full flex items-center justify-center gap-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 text-xs py-1.5 rounded-lg transition-colors border border-red-900/50 mt-3"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -359,7 +359,7 @@ export function RoomControls({
       {/* Leave Room */}
       <button
         onClick={onLeaveRoom}
-        className="w-full text-sm text-gray-400 hover:text-red-400 py-2 rounded-md border border-gray-800 hover:border-red-900/50 hover:bg-red-950/20 transition-all"
+        className="w-full text-xs text-gray-400 hover:text-red-400 py-1.5 rounded-md border border-gray-800 hover:border-red-900/50 hover:bg-red-950/20 transition-all"
       >
         Leave Room
       </button>

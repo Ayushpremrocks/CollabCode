@@ -80,7 +80,7 @@ export function ChatPanel({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
-          <span className="text-sm font-semibold text-gray-300">Chat</span>
+          <span className="text-xs font-semibold text-gray-300">Chat</span>
         </div>
         <button
           onClick={onToggle}
@@ -116,7 +116,7 @@ export function ChatPanel({
                   />
                 ) : (
                   <div
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 mt-0.5"
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0 mt-0.5"
                     style={{ backgroundColor: color }}
                   >
                     {displayName.charAt(0).toUpperCase()}
@@ -126,12 +126,12 @@ export function ChatPanel({
                 {/* Bubble */}
                 <div className={`max-w-[75%] ${isOwn ? 'items-end' : 'items-start'} flex flex-col gap-0.5`}>
                   {!isOwn && (
-                    <span className="text-xs font-medium" style={{ color }}>
+                    <span className="text-[10px] font-medium" style={{ color }}>
                       {displayName}
                     </span>
                   )}
                   <div
-                    className={`px-3 py-1.5 rounded-xl text-sm leading-relaxed break-words ${
+                    className={`px-2.5 py-1 rounded-xl text-xs leading-relaxed break-words ${
                       isOwn
                         ? 'bg-indigo-600 text-white rounded-tr-sm'
                         : 'bg-gray-800 text-gray-200 rounded-tl-sm'
@@ -139,7 +139,7 @@ export function ChatPanel({
                   >
                     {msg.message}
                   </div>
-                  <span className="text-xs text-gray-600">{formatTime(msg.timestamp)}</span>
+                  <span className="text-[10px] text-gray-600">{formatTime(msg.timestamp)}</span>
                 </div>
               </div>
             );
@@ -156,7 +156,7 @@ export function ChatPanel({
           onKeyDown={handleKeyDown}
           placeholder="Message... (Enter to send)"
           rows={1}
-          className="flex-1 bg-gray-800 border border-gray-700 text-gray-200 text-sm px-3 py-1.5 rounded-lg resize-none focus:border-indigo-500 focus:outline-none placeholder-gray-600 transition-colors"
+          className="flex-1 bg-gray-800 border border-gray-700 text-gray-200 text-xs px-3 py-1.5 rounded-lg resize-none focus:border-indigo-500 focus:outline-none placeholder-gray-600 transition-colors"
           style={{ minHeight: '34px', maxHeight: '80px' }}
         />
         <button
