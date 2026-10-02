@@ -1,19 +1,23 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="CollabCode - Real-time collaborative code editor with Yjs CRDTs" />
-    <title>CollabCode — Collaborative Code Editor</title>
+    <meta name="description" content="CollabCode — Real-time collaborative coding with an AI debugging agent. Write together, execute remotely, let AI verify fixes, then approve." />
+    <title>CollabCode — Code Together. Debug Together.</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
     <style>
+      /* Prevent any flash of light mode during initial load */
+      html, body, #root {
+        background: #0D1117;
+        color: #E6EDF3;
+      }
       body {
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
         margin: 0;
-        background: #030712;
       }
     </style>
   </head>

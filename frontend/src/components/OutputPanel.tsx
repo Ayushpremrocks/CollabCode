@@ -7,15 +7,15 @@ interface OutputPanelProps {
   onClose: () => void;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  'Accepted': 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
-  'Wrong Answer': 'text-red-400 bg-red-500/10 border-red-500/30',
-  'Time Limit Exceeded': 'text-amber-400 bg-amber-500/10 border-amber-500/30',
-  'Memory Limit Exceeded': 'text-orange-400 bg-orange-500/10 border-orange-500/30',
-  'Runtime Error': 'text-red-400 bg-red-500/10 border-red-500/30',
-  'Compilation Error': 'text-rose-400 bg-rose-500/10 border-rose-500/30',
-  'Not Supported': 'text-gray-400 bg-gray-500/10 border-gray-500/30',
-  'Configuration Error': 'text-amber-400 bg-amber-500/10 border-amber-500/30',
+const STATUS_COLORS: Record<string, { text: string; bg: string; border: string }> = {
+  'Accepted':            { text: 'var(--cc-success)', bg: 'var(--cc-success-dim)',  border: 'rgba(63,185,80,0.3)' },
+  'Wrong Answer':        { text: 'var(--cc-error)',   bg: 'var(--cc-error-dim)',    border: 'rgba(248,81,73,0.3)' },
+  'Time Limit Exceeded': { text: 'var(--cc-warning)', bg: 'var(--cc-warning-dim)', border: 'rgba(210,153,34,0.3)' },
+  'Memory Limit Exceeded':{ text: 'var(--cc-warning)',bg: 'var(--cc-warning-dim)', border: 'rgba(210,153,34,0.3)' },
+  'Runtime Error':       { text: 'var(--cc-error)',   bg: 'var(--cc-error-dim)',    border: 'rgba(248,81,73,0.3)' },
+  'Compilation Error':   { text: 'var(--cc-error)',   bg: 'var(--cc-error-dim)',    border: 'rgba(248,81,73,0.3)' },
+  'Not Supported':       { text: 'var(--cc-text-muted)', bg: 'var(--cc-surface-el)', border: 'var(--cc-border)' },
+  'Configuration Error': { text: 'var(--cc-warning)', bg: 'var(--cc-warning-dim)', border: 'rgba(210,153,34,0.3)' },
 };
 
 export function OutputPanel({ result, isRunning, onClose }: OutputPanelProps) {
@@ -48,14 +48,15 @@ export function OutputPanel({ result, isRunning, onClose }: OutputPanelProps) {
   }, [height]);
 
   const statusKey = result?.status || '';
-  const statusClass = STATUS_COLORS[statusKey] || 'text-gray-400 bg-gray-500/10 border-gray-500/30';
-  const isSuccess = result?.statusId === 3; // Accepted
+  const statusEntry = STATUS_COLORS[statusKey] || STATUS_COLORS['Not Supported'];
+  const isSuccess = result?.statusId === 3;
+
 
   return (
     <div
       ref={panelRef}
-      style={{ height: `${height}px` }}
-      className="bg-gray-900 border-t border-gray-800 flex flex-col"
+      style={{ height: `${height}px`, background: '#0A0E14', borderTop: '1px solid var(--cc-border)' }}
+      className="flex flex-col"
     >
       {/* Resize handle */}
       <div
@@ -64,41 +65,45 @@ export function OutputPanel({ result, isRunning, onClose }: OutputPanelProps) {
       />
 
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 border-b flex-shrink-0" style={{ borderColor: 'var(--cc-border)' }}>
         <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-            <svg className="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <span className="text-xs font-semibold font-code flex items-center gap-2" style={{ color: 'var(--cc-text-sec)' }}>
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: 'var(--cc-accent)' }}>
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            Output
+            OUTPUT
           </span>
 
           {isRunning && (
-            <div className="flex items-center gap-2 text-xs text-indigo-400">
-              <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+            <div className="flex items-center gap-2 text-xs font-code" style={{ color: 'var(--cc-accent)' }}>
+              <div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--cc-accent)', borderTopColor: 'transparent' }} />
               Running...
             </div>
           )}
 
           {result && !isRunning && (
-            <span className={`text-xs font-medium px-2 py-0.5 rounded border ${statusClass}`}>
+            <span
+              className="text-[11px] font-semibold px-2 py-0.5 rounded border font-code"
+              style={{ color: statusEntry.text, background: statusEntry.bg, borderColor: statusEntry.border }}
+            >
               {result.status}
             </span>
           )}
 
-          {result && result.time && (
-            <span className="text-xs text-gray-500">⏱ {result.time}s</span>
+          {result?.time && (
+            <span className="text-xs font-code" style={{ color: 'var(--cc-text-muted)' }}>⏱ {result.time}s</span>
           )}
-          {result && result.memory && (
-            <span className="text-xs text-gray-500">
-              💾 {(result.memory / 1024).toFixed(1)} MB
+          {result?.memory && (
+            <span className="text-xs font-code" style={{ color: 'var(--cc-text-muted)' }}>
+              {(result.memory / 1024).toFixed(1)} MB
             </span>
           )}
         </div>
 
         <button
           onClick={onClose}
-          className="text-gray-500 hover:text-gray-300 transition-colors p-1 rounded"
+          className="transition-colors p-1 rounded"
+          style={{ color: 'var(--cc-text-muted)' }}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -107,19 +112,19 @@ export function OutputPanel({ result, isRunning, onClose }: OutputPanelProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4 font-mono text-sm">
+      <div className="flex-1 overflow-auto p-4 font-code text-xs">
         {isRunning ? (
-          <div className="flex items-center gap-3 text-gray-400">
-            <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <div className="flex items-center gap-3" style={{ color: 'var(--cc-text-muted)' }}>
+            <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--cc-accent)', borderTopColor: 'transparent' }} />
             Executing code...
           </div>
         ) : result ? (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {/* Stdout */}
             {result.stdout && (
               <div>
-                <div className="text-xs font-semibold text-emerald-400 mb-1 uppercase tracking-wide">stdout</div>
-                <pre className="text-gray-200 bg-gray-800/50 rounded-lg p-3 overflow-auto whitespace-pre-wrap">
+                <div className="text-[10px] font-semibold uppercase tracking-widest mb-1.5" style={{ color: 'var(--cc-success)' }}>stdout</div>
+                <pre className="rounded px-3 py-2.5 overflow-auto whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--cc-text)', background: 'var(--cc-surface)', border: '1px solid var(--cc-border)' }}>
                   {result.stdout}
                 </pre>
               </div>
@@ -128,8 +133,8 @@ export function OutputPanel({ result, isRunning, onClose }: OutputPanelProps) {
             {/* Compile Output */}
             {result.compileOutput && (
               <div>
-                <div className="text-xs font-semibold text-amber-400 mb-1 uppercase tracking-wide">compile output</div>
-                <pre className="text-amber-200 bg-amber-900/20 border border-amber-500/20 rounded-lg p-3 overflow-auto whitespace-pre-wrap">
+                <div className="text-[10px] font-semibold uppercase tracking-widest mb-1.5" style={{ color: 'var(--cc-warning)' }}>compile output</div>
+                <pre className="rounded px-3 py-2.5 overflow-auto whitespace-pre-wrap leading-relaxed" style={{ color: '#f5deb3', background: 'var(--cc-warning-dim)', border: '1px solid rgba(210,153,34,0.25)' }}>
                   {result.compileOutput}
                 </pre>
               </div>
@@ -138,8 +143,8 @@ export function OutputPanel({ result, isRunning, onClose }: OutputPanelProps) {
             {/* Stderr */}
             {result.stderr && (
               <div>
-                <div className="text-xs font-semibold text-red-400 mb-1 uppercase tracking-wide">stderr</div>
-                <pre className="text-red-200 bg-red-900/20 border border-red-500/20 rounded-lg p-3 overflow-auto whitespace-pre-wrap">
+                <div className="text-[10px] font-semibold uppercase tracking-widest mb-1.5" style={{ color: 'var(--cc-error)' }}>stderr</div>
+                <pre className="rounded px-3 py-2.5 overflow-auto whitespace-pre-wrap leading-relaxed" style={{ color: '#ffb3b0', background: 'var(--cc-error-dim)', border: '1px solid rgba(248,81,73,0.25)' }}>
                   {result.stderr}
                 </pre>
               </div>
@@ -147,12 +152,12 @@ export function OutputPanel({ result, isRunning, onClose }: OutputPanelProps) {
 
             {/* No output */}
             {isSuccess && !result.stdout && !result.stderr && !result.compileOutput && (
-              <div className="text-emerald-400 text-sm">✓ Program ran successfully with no output.</div>
+              <div className="text-xs font-code" style={{ color: 'var(--cc-success)' }}>✓ Process exited successfully with no output.</div>
             )}
           </div>
         ) : (
-          <div className="text-gray-600 text-sm">
-            Click "Run Code" to execute your code.
+          <div className="text-xs font-code" style={{ color: 'var(--cc-text-muted)' }}>
+            Press <span style={{ color: 'var(--cc-success)' }}>▶ Run</span> to execute your code.
           </div>
         )}
       </div>

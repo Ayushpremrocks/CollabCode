@@ -1,48 +1,30 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+﻿import { createContext, useContext, type ReactNode } from 'react';
 
-type Theme = 'dark' | 'light';
-
+/**
+ * ThemeContext — CollabCode is dark-only.
+ *
+ * The context shape is intentionally kept intact so existing components that
+ * destructure { isDark } do not need to be changed individually.
+ * isDark is always true; toggleTheme is a no-op.
+ */
 interface ThemeContextType {
-  theme: Theme;
-  toggleTheme: () => void;
   isDark: boolean;
+  toggleTheme: () => void;
 }
 
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+const ThemeContext = createContext<ThemeContextType>({
+  isDark: true,
+  toggleTheme: () => {},
+});
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('collabcode-theme');
-    return (saved === 'light' ? 'light' : 'dark') as Theme;
-  });
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-      root.classList.remove('light');
-    } else {
-      root.classList.add('light');
-      root.classList.remove('dark');
-    }
-    localStorage.setItem('collabcode-theme', theme);
-  }, [theme]);
-
-  const toggleTheme = useCallback(() => {
-    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-  }, []);
-
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, isDark: theme === 'dark' }}>
+    <ThemeContext.Provider value={{ isDark: true, toggleTheme: () => {} }}>
       {children}
     </ThemeContext.Provider>
   );
 }
 
 export function useTheme() {
-  const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error('useTheme must be used within a ThemeProvider');
-  }
-  return context;
+  return useContext(ThemeContext);
 }

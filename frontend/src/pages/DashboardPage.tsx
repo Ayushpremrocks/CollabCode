@@ -4,7 +4,6 @@ import { Navbar } from '../components/Navbar';
 import { roomService } from '../services/roomService';
 import type { Room } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
 
 function formatExpiry(expiresAt: string | null): { text: string; warning: boolean } {
   if (!expiresAt) return { text: '', warning: false };
@@ -61,7 +60,6 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAuthenticated } = useAuth();
-  const { isDark } = useTheme();
 
   useEffect(() => {
     // Check for ?msg= query param (from room deletion redirect)
@@ -137,16 +135,10 @@ export function DashboardPage() {
     }
   }, []);
 
-  const bg = isDark ? 'bg-gray-950' : 'bg-gray-50';
-  const cardBg = isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200';
-  const inputCls = isDark
-    ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-600 focus:border-indigo-500'
-    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-indigo-500';
-  const textPrimary = isDark ? 'text-white' : 'text-gray-900';
-  const textMuted = isDark ? 'text-gray-500' : 'text-gray-500';
+
 
   return (
-    <div className={`min-h-screen ${bg}`}>
+    <div className="min-h-screen" style={{ background: 'var(--cc-bg)' }}>
       <Navbar />
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -164,10 +156,10 @@ export function DashboardPage() {
 
         {/* Welcome */}
         <div className="mb-8">
-          <h1 className={`text-2xl font-bold ${textPrimary}`}>
-            Welcome back, <span className="text-indigo-400">{user?.username}</span>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--cc-text)' }}>
+            Welcome back, <span style={{ color: 'var(--cc-accent)' }}>{user?.username}</span>
           </h1>
-          <p className={`${textMuted} text-sm mt-1`}>
+          <p className="text-sm mt-1" style={{ color: 'var(--cc-text-muted)' }}>
             Create or join a room to start collaborating
           </p>
         </div>
@@ -181,8 +173,8 @@ export function DashboardPage() {
         {/* Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           {/* Create Room */}
-          <div className={`border rounded-xl p-5 ${cardBg}`}>
-            <h2 className={`text-base font-semibold ${textPrimary} mb-3`}>Create Room</h2>
+          <div className="border rounded p-5" style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}>
+            <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--cc-text)' }}>Create Room</h2>
             <form onSubmit={handleCreateRoom} className="flex gap-2">
               <input
                 type="text"
@@ -192,28 +184,28 @@ export function DashboardPage() {
                 required
                 maxLength={100}
                 disabled={creatingRoom}
-                className={`flex-1 border rounded-lg px-3.5 py-2 text-sm focus:outline-none transition-all ${inputCls}`}
+                className="flex-1 border rounded px-3.5 py-2 text-sm focus:outline-none transition-all"
+                style={{ background: 'var(--cc-surface-el)', borderColor: 'var(--cc-border)', color: 'var(--cc-text)' }}
               />
               <button
                 type="submit"
                 disabled={creatingRoom || !newRoomName.trim()}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap disabled:opacity-50 flex items-center gap-1.5"
+                className="px-4 py-2 rounded text-sm font-medium transition-colors whitespace-nowrap disabled:opacity-50 flex items-center gap-1.5"
+                style={{ background: 'var(--cc-accent)', color: '#0D1117' }}
               >
                 {creatingRoom ? (
                   <>
-                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
                     Creating...
                   </>
-                ) : (
-                  'Create'
-                )}
+                ) : 'Create'}
               </button>
             </form>
           </div>
 
           {/* Join Room */}
-          <div className={`border rounded-xl p-5 ${cardBg}`}>
-            <h2 className={`text-base font-semibold ${textPrimary} mb-3`}>Join Room</h2>
+          <div className="border rounded p-5" style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}>
+            <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--cc-text)' }}>Join Room</h2>
             <form onSubmit={handleJoinRoom} className="flex gap-2">
               <input
                 type="text"
@@ -222,15 +214,13 @@ export function DashboardPage() {
                 placeholder="Enter room code"
                 required
                 maxLength={20}
-                className={`flex-1 border rounded-lg px-3.5 py-2 text-sm focus:outline-none transition-all font-mono tracking-wider uppercase ${inputCls}`}
+                className="flex-1 border rounded px-3.5 py-2 text-sm focus:outline-none transition-all font-code tracking-widest uppercase"
+                style={{ background: 'var(--cc-surface-el)', borderColor: 'var(--cc-border)', color: 'var(--cc-text)' }}
               />
               <button
                 type="submit"
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border whitespace-nowrap ${
-                  isDark
-                    ? 'bg-gray-800 hover:bg-gray-700 text-white border-gray-700'
-                    : 'bg-gray-100 hover:bg-gray-200 text-gray-900 border-gray-300'
-                }`}
+                className="px-4 py-2 rounded text-sm font-medium transition-colors border whitespace-nowrap"
+                style={{ background: 'var(--cc-surface-el)', color: 'var(--cc-text-sec)', borderColor: 'var(--cc-border)' }}
               >
                 Join
               </button>
@@ -240,18 +230,18 @@ export function DashboardPage() {
 
         {/* Room List */}
         <div>
-          <h2 className={`text-lg font-semibold ${textPrimary} mb-4`}>Your Rooms</h2>
+          <h2 className="text-base font-semibold mb-4" style={{ color: 'var(--cc-text)' }}>Your Rooms</h2>
 
           {loading ? (
             <div className="text-center py-12">
               <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
             </div>
           ) : rooms.length === 0 ? (
-            <div className={`text-center py-12 border rounded-xl ${cardBg}`}>
-              <svg className={`w-12 h-12 ${isDark ? 'text-gray-700' : 'text-gray-300'} mx-auto mb-3`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="text-center py-12 border rounded" style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}>
+              <svg className="w-12 h-12 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: 'var(--cc-border)' }}>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
-              <p className={`${textMuted} text-sm`}>No rooms yet. Create one to get started!</p>
+              <p className="text-sm" style={{ color: 'var(--cc-text-muted)' }}>No rooms yet. Create one to get started!</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -264,9 +254,8 @@ export function DashboardPage() {
                 return (
                   <div
                     key={room.id}
-                    className={`border rounded-xl p-4 transition-all group relative ${cardBg} ${
-                      isDark ? 'hover:border-gray-700' : 'hover:border-gray-300'
-                    }`}
+                    className="border rounded p-4 transition-all group relative"
+                    style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}
                   >
                     {/* Delete confirm overlay */}
                     {deleteConfirm === room.roomCode && (
@@ -299,7 +288,7 @@ export function DashboardPage() {
                       className="w-full text-left"
                     >
                       <div className="flex items-start justify-between gap-6 mb-2 pr-6">
-                        <h3 className={`text-sm font-medium ${textPrimary} group-hover:text-indigo-400 transition-colors truncate`}>
+                        <h3 className="text-sm font-medium transition-colors truncate" style={{ color: 'var(--cc-text)' }}>
                           {room.name}
                         </h3>
                         {isOwner && (
@@ -311,21 +300,25 @@ export function DashboardPage() {
 
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
-                          <code className={`text-xs font-mono ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                          <code className="text-xs font-code" style={{ color: 'var(--cc-text-muted)' }}>
                             {room.roomCode}
                           </code>
                           <CopyButton text={room.roomCode} />
                         </div>
-                        <span className={`text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
+                        <span className="text-xs" style={{ color: 'var(--cc-text-muted)' }}>
                           {room.participants.length} member{room.participants.length !== 1 ? 's' : ''}
                         </span>
                       </div>
 
                       {expiry.text && (
-                        <div className={`mt-2 text-xs font-medium ${expiry.warning ? 'text-amber-400' : isDark ? 'text-gray-600' : 'text-gray-400'}`}>
+                        <div
+                          className="mt-2 text-xs font-medium"
+                          style={{ color: expiry.warning ? 'var(--cc-warning)' : 'var(--cc-text-muted)' }}
+                        >
                           {expiry.warning && '⚠ '}{expiry.text}
                         </div>
                       )}
+
                     </button>
 
                     {/* Host delete button */}
