@@ -30,6 +30,7 @@ function CopyButton({ text }: { text: string }) {
   };
   return (
     <button
+      type="button"
       onClick={handleCopy}
       title="Copy room code"
       className="p-1 text-gray-500 hover:text-gray-300 transition-colors rounded"
@@ -254,22 +255,28 @@ export function DashboardPage() {
                 return (
                   <div
                     key={room.id}
-                    className="border rounded p-4 transition-all group relative"
+                    onClick={() => navigate(`/room/${room.roomCode}`)}
+                    className="border rounded p-4 transition-all group relative cursor-pointer"
                     style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}
                   >
                     {/* Delete confirm overlay */}
                     {deleteConfirm === room.roomCode && (
-                      <div className="absolute inset-0 bg-gray-900/95 rounded-xl flex flex-col items-center justify-center gap-3 z-10 p-4">
+                      <div
+                        className="absolute inset-0 bg-gray-900/95 rounded-xl flex flex-col items-center justify-center gap-3 z-10 p-4"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <p className="text-white text-sm font-medium text-center">Delete "{room.name}"?</p>
                         <p className="text-gray-400 text-xs text-center">This cannot be undone. All data will be lost.</p>
                         <div className="flex gap-2">
                           <button
+                            type="button"
                             onClick={() => setDeleteConfirm(null)}
                             className="px-3 py-1.5 text-sm text-gray-400 hover:text-white border border-gray-700 rounded-lg transition-colors"
                           >
                             Cancel
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleDeleteRoom(room.roomCode)}
                             disabled={deletingCode === room.roomCode}
                             className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
@@ -283,9 +290,14 @@ export function DashboardPage() {
                       </div>
                     )}
 
+                    {/* Dedicated button for keyboard accessibility and primary click action */}
                     <button
-                      onClick={() => navigate(`/room/${room.roomCode}`)}
-                      className="w-full text-left"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/room/${room.roomCode}`);
+                      }}
+                      className="w-full text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-indigo-500 rounded"
                     >
                       <div className="flex items-start justify-between gap-6 mb-2 pr-6">
                         <h3 className="text-sm font-medium transition-colors truncate" style={{ color: 'var(--cc-text)' }}>
@@ -297,33 +309,33 @@ export function DashboardPage() {
                           </span>
                         )}
                       </div>
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <code className="text-xs font-code" style={{ color: 'var(--cc-text-muted)' }}>
-                            {room.roomCode}
-                          </code>
-                          <CopyButton text={room.roomCode} />
-                        </div>
-                        <span className="text-xs" style={{ color: 'var(--cc-text-muted)' }}>
-                          {room.participants.length} member{room.participants.length !== 1 ? 's' : ''}
-                        </span>
-                      </div>
-
-                      {expiry.text && (
-                        <div
-                          className="mt-2 text-xs font-medium"
-                          style={{ color: expiry.warning ? 'var(--cc-warning)' : 'var(--cc-text-muted)' }}
-                        >
-                          {expiry.warning && '⚠ '}{expiry.text}
-                        </div>
-                      )}
-
                     </button>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-xs font-code" style={{ color: 'var(--cc-text-muted)' }}>
+                          {room.roomCode}
+                        </code>
+                        <CopyButton text={room.roomCode} />
+                      </div>
+                      <span className="text-xs" style={{ color: 'var(--cc-text-muted)' }}>
+                        {room.participants.length} member{room.participants.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+
+                    {expiry.text && (
+                      <div
+                        className="mt-2 text-xs font-medium"
+                        style={{ color: expiry.warning ? 'var(--cc-warning)' : 'var(--cc-text-muted)' }}
+                      >
+                        {expiry.warning && '⚠ '}{expiry.text}
+                      </div>
+                    )}
 
                     {/* Host delete button */}
                     {isOwner && (
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setDeleteConfirm(room.roomCode);
