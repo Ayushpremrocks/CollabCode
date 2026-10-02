@@ -23,7 +23,7 @@ export function Navbar() {
     setIsLoggingOut(true);
     try {
       await logout();
-      toast.info('Signed out of CollabCode');
+      toast.info('Signed out of CodeCollab');
       navigate('/login');
     } catch {
       toast.error('Failed to log out cleanly');
@@ -52,7 +52,7 @@ export function Navbar() {
                   </svg>
                 </div>
                 <span className="font-semibold text-base tracking-tight" style={{ color: 'var(--cc-text)' }}>
-                  CollabCode
+                  CodeCollab
                 </span>
               </Link>
 
@@ -101,7 +101,7 @@ export function Navbar() {
                 </span>
               }
             >
-              Log out of CollabCode?
+              Log out of CodeCollab?
             </CollabAlertDialogTitle>
             <CollabAlertDialogDescription>
               You will be signed out of your current session. You will need to sign in again to access your rooms and dashboard.
