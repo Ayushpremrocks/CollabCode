@@ -2,6 +2,18 @@ import { useState, useRef, useEffect } from 'react';
 import * as Y from 'yjs';
 import { agentService } from '../services/agentService';
 import type { AgentDebugResponse } from '../types';
+import {
+  toast,
+  CollabAlertDialog,
+  CollabAlertDialogContent,
+  CollabAlertDialogHeader,
+  CollabAlertDialogTitle,
+  CollabAlertDialogDescription,
+  CollabAlertDialogFooter,
+  CollabAlertDialogCancel,
+  CollabAlertDialogAction,
+  CollabTooltip,
+} from './ui';
 
 /**
  * AgentDebugPanel — autonomous AI debugging agent UI.
@@ -105,6 +117,7 @@ export function AgentDebugPanel({
   const [result, setResult] = useState<AgentDebugResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [showDiff, setShowDiff] = useState<'original' | 'fix'>('fix');
+  const [confirmApproveOpen, setConfirmApproveOpen] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
 
   // Scroll result into view when it arrives
@@ -152,10 +165,12 @@ export function AgentDebugPanel({
     });
 
     setAgentState('approved');
+    toast.success('AI patch applied to shared editor');
   };
 
   const handleReject = () => {
     setAgentState('rejected');
+    toast.info('AI patch rejected — editor unchanged');
   };
 
   const handleReset = () => {
@@ -341,30 +356,88 @@ export function AgentDebugPanel({
 
               {/* Approval buttons */}
               <div className="flex gap-2 pt-1">
-                <button
-                  onClick={handleApprove}
-                  disabled={!result.proposedFix}
-                  className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5
-                    ${result.proposedFix
-                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500'
-                      : 'bg-gray-800 text-gray-600 cursor-not-allowed border border-gray-700'
-                    }`}
-                >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                  Approve &amp; Apply
-                </button>
-                <button
-                  onClick={handleReject}
-                  className="flex-1 py-2 px-3 rounded-md text-xs font-semibold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition-all flex items-center justify-center gap-1.5"
-                >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  Reject
-                </button>
+                <CollabTooltip content="Review and approve fix before applying to room" side="top">
+                  <button
+                    onClick={() => setConfirmApproveOpen(true)}
+                    disabled={!result.proposedFix}
+                    className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer
+                      ${result.proposedFix
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500'
+                        : 'bg-gray-800 text-gray-600 cursor-not-allowed border border-gray-700'
+                      }`}
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Approve &amp; Apply
+                  </button>
+                </CollabTooltip>
+                <CollabTooltip content="Discard patch and keep code untouched" side="top">
+                  <button
+                    onClick={handleReject}
+                    className="flex-1 py-2 px-3 rounded-md text-xs font-semibold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Reject
+                  </button>
+                </CollabTooltip>
               </div>
+
+              {/* Explicit Human Approval Dialog */}
+              <CollabAlertDialog open={confirmApproveOpen} onOpenChange={setConfirmApproveOpen}>
+                <CollabAlertDialogContent>
+                  <CollabAlertDialogHeader>
+                    <CollabAlertDialogTitle>
+                      <span className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-[#39C5CF]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                          <rect x="3" y="11" width="18" height="11" rx="2" />
+                          <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                        </svg>
+                        REVIEW PROPOSED FIX
+                      </span>
+                    </CollabAlertDialogTitle>
+                    <CollabAlertDialogDescription>
+                      The AI-generated patch has been verified against the execution environment. Approving will atomically apply this patch to the shared collaborative editor for all connected collaborators.
+                    </CollabAlertDialogDescription>
+                  </CollabAlertDialogHeader>
+
+                  {result && (
+                    <div className="space-y-2 py-2 font-code text-xs">
+                      <div className="flex items-center justify-between p-2 rounded bg-[#0D1117] border border-[#252C35]">
+                        <span className="text-[#8B949E]">Verification:</span>
+                        <span className={result.success ? "text-[#3FB950] font-semibold" : "text-[#D29922] font-semibold"}>
+                          {result.success ? '✓ Passed' : '⚠ Best attempt'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded bg-[#0D1117] border border-[#252C35]">
+                        <span className="text-[#8B949E]">Iterations:</span>
+                        <span className="text-[#39C5CF] font-semibold">{result.iterations}</span>
+                      </div>
+                      {result.reasoning && (
+                        <div className="p-2.5 rounded bg-[#0D1117] border border-[#252C35] text-[11px] text-[#8B949E] max-h-32 overflow-y-auto">
+                          <span className="font-semibold text-[#E6EDF3] block mb-1">Reasoning:</span>
+                          {result.reasoning}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <CollabAlertDialogFooter>
+                    <CollabAlertDialogCancel>Reject</CollabAlertDialogCancel>
+                    <CollabAlertDialogAction
+                      variant="primary"
+                      onClick={() => {
+                        handleApprove();
+                        setConfirmApproveOpen(false);
+                      }}
+                    >
+                      Approve Fix
+                    </CollabAlertDialogAction>
+                  </CollabAlertDialogFooter>
+                </CollabAlertDialogContent>
+              </CollabAlertDialog>
             </div>
           )}
 

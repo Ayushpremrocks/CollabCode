@@ -1,5 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { LANGUAGE_CONFIG, type SupportedLanguage } from '../types';
+import {
+  CollabAlertDialog,
+  CollabAlertDialogContent,
+  CollabAlertDialogHeader,
+  CollabAlertDialogTitle,
+  CollabAlertDialogDescription,
+  CollabAlertDialogFooter,
+  CollabAlertDialogCancel,
+  CollabAlertDialogAction,
+} from './ui/CollabAlertDialog';
+import { CollabTooltip } from './ui/CollabTooltip';
+import { toast } from './ui/CollabToast';
 
 interface RoomControlsProps {
   roomCode: string;
@@ -45,6 +57,8 @@ export function RoomControls({
   const [copied, setCopied] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -60,9 +74,10 @@ export function RoomControls({
     try {
       await navigator.clipboard.writeText(roomCode);
       setCopied(true);
+      toast.success(`Room code ${roomCode} copied to clipboard`);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      console.error('Failed to copy room code');
+      toast.error('Failed to copy room code');
     }
   };
 
@@ -110,21 +125,24 @@ export function RoomControls({
             )}
           </div>
         </div>
-        <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-1 rounded transition-colors"
-          style={{ color: 'var(--cc-text-muted)' }}
-          title={isCollapsed ? 'Expand panel' : 'Collapse panel'}
-        >
-          <svg
-            className={`w-4 h-4 transition-transform ${isCollapsed ? 'rotate-180' : ''}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+        <CollabTooltip content={isCollapsed ? 'Expand panel' : 'Collapse panel'}>
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="p-1 rounded transition-colors cursor-pointer"
+            style={{ color: 'var(--cc-text-muted)' }}
+            aria-label={isCollapsed ? 'Expand panel' : 'Collapse panel'}
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+            <svg
+              className={`w-4 h-4 transition-transform ${isCollapsed ? 'rotate-180' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </CollabTooltip>
       </div>
 
       {!isCollapsed && (
@@ -137,22 +155,25 @@ export function RoomControls({
           <code className="flex-1 text-xs px-2.5 py-1.5 rounded font-code truncate" style={{ background: 'var(--cc-surface-el)', color: 'var(--cc-accent)', border: '1px solid var(--cc-border)' }}>
             {roomCode}
           </code>
-          <button
-            onClick={handleCopyCode}
-            className="p-1.5 rounded transition-colors shrink-0"
-            style={{ background: 'var(--cc-surface-el)', border: '1px solid var(--cc-border)', color: copied ? 'var(--cc-success)' : 'var(--cc-text-muted)' }}
-            title="Copy room code"
-          >
-            {copied ? (
-              <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-            )}
-          </button>
+          <CollabTooltip content={copied ? 'Copied!' : 'Copy room code'}>
+            <button
+              type="button"
+              onClick={handleCopyCode}
+              className="p-1.5 rounded transition-colors shrink-0 cursor-pointer"
+              style={{ background: 'var(--cc-surface-el)', border: '1px solid var(--cc-border)', color: copied ? 'var(--cc-success)' : 'var(--cc-text-muted)' }}
+              aria-label="Copy room code"
+            >
+              {copied ? (
+                <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              )}
+            </button>
+          </CollabTooltip>
         </div>
       </div>
 
@@ -360,12 +381,9 @@ export function RoomControls({
         {/* Delete Room (Host Only) */}
         {isHost && onDeleteRoom && (
           <button
-            onClick={() => {
-              if (window.confirm('Delete this room? This cannot be undone and will kick all active users.')) {
-                onDeleteRoom();
-              }
-            }}
-            className="w-full flex items-center justify-center gap-2 text-xs py-1.5 rounded transition-colors border mt-1"
+            type="button"
+            onClick={() => setConfirmDeleteOpen(true)}
+            className="w-full flex items-center justify-center gap-2 text-xs py-1.5 rounded transition-colors border mt-1 cursor-pointer hover:brightness-110"
             style={{ background: 'var(--cc-error-dim)', color: 'var(--cc-error)', borderColor: 'rgba(248,81,73,0.3)' }}
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -378,14 +396,81 @@ export function RoomControls({
 
       {/* Leave Room */}
       <button
-        onClick={onLeaveRoom}
-        className="w-full text-xs py-1.5 rounded border transition-all"
+        type="button"
+        onClick={() => setConfirmLeaveOpen(true)}
+        className="w-full text-xs py-1.5 rounded border transition-all cursor-pointer hover:bg-red-500/10"
         style={{ color: 'var(--cc-error)', borderColor: 'rgba(248,81,73,0.2)', background: 'transparent' }}
       >
         Leave Room
       </button>
       </div>
       )}
+
+      {/* Confirmation Dialog for Delete Room */}
+      <CollabAlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <CollabAlertDialogContent>
+          <CollabAlertDialogHeader>
+            <CollabAlertDialogTitle
+              icon={
+                <span className="w-6 h-6 rounded flex items-center justify-center shrink-0" style={{ background: 'var(--cc-error-dim)', color: 'var(--cc-error)' }}>
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </span>
+              }
+            >
+              Delete Room?
+            </CollabAlertDialogTitle>
+            <CollabAlertDialogDescription>
+              Are you sure you want to delete <span className="font-mono text-white font-semibold">&ldquo;{roomName}&rdquo;</span>? This cannot be undone and will immediately kick all active users and remove all code snapshots.
+            </CollabAlertDialogDescription>
+          </CollabAlertDialogHeader>
+          <CollabAlertDialogFooter>
+            <CollabAlertDialogCancel>Cancel</CollabAlertDialogCancel>
+            <CollabAlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                onDeleteRoom?.();
+              }}
+            >
+              Delete Room
+            </CollabAlertDialogAction>
+          </CollabAlertDialogFooter>
+        </CollabAlertDialogContent>
+      </CollabAlertDialog>
+
+      {/* Confirmation Dialog for Leave Room */}
+      <CollabAlertDialog open={confirmLeaveOpen} onOpenChange={setConfirmLeaveOpen}>
+        <CollabAlertDialogContent>
+          <CollabAlertDialogHeader>
+            <CollabAlertDialogTitle
+              icon={
+                <span className="w-6 h-6 rounded flex items-center justify-center shrink-0" style={{ background: 'var(--cc-warning-dim)', color: 'var(--cc-warning)' }}>
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                </span>
+              }
+            >
+              Leave Room?
+            </CollabAlertDialogTitle>
+            <CollabAlertDialogDescription>
+              You are about to leave <span className="font-mono text-white font-semibold">&ldquo;{roomName}&rdquo;</span>. You will be disconnected from real-time collaboration.
+            </CollabAlertDialogDescription>
+          </CollabAlertDialogHeader>
+          <CollabAlertDialogFooter>
+            <CollabAlertDialogCancel>Stay in Room</CollabAlertDialogCancel>
+            <CollabAlertDialogAction
+              variant="warning"
+              onClick={() => {
+                onLeaveRoom();
+              }}
+            >
+              Leave Room
+            </CollabAlertDialogAction>
+          </CollabAlertDialogFooter>
+        </CollabAlertDialogContent>
+      </CollabAlertDialog>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
 import type { ExecuteCodeResponse } from '../types';
+import { CollabTooltip } from './ui';
 
 interface OutputPanelProps {
   result: ExecuteCodeResponse | null;
@@ -100,15 +101,18 @@ export function OutputPanel({ result, isRunning, onClose }: OutputPanelProps) {
           )}
         </div>
 
-        <button
-          onClick={onClose}
-          className="transition-colors p-1 rounded"
-          style={{ color: 'var(--cc-text-muted)' }}
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        <CollabTooltip content="Close output (Esc)" side="left">
+          <button
+            onClick={onClose}
+            aria-label="Close output panel"
+            className="transition-colors p-1 rounded hover:bg-[#1B222C]"
+            style={{ color: 'var(--cc-text-muted)' }}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </CollabTooltip>
       </div>
 
       {/* Content */}

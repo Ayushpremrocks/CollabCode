@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { ChatMessage } from '../types';
 import { getUserColor } from '../types';
+import { CollabTooltip } from './ui/CollabTooltip';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -52,22 +53,25 @@ export function ChatPanel({
 
   if (isCollapsed) {
     return (
-      <button
-        onClick={onToggle}
-        className="flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 hover:border-gray-700 hover:bg-gray-800/50 transition-all relative"
-        title="Open chat"
-      >
-        <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-        </svg>
-        <span className="text-xs text-gray-400 font-medium">Chat</span>
-        {unreadCount > 0 && (
-          <span className="absolute -top-1.5 -right-1.5 bg-indigo-500 text-white text-xs font-bold w-4 h-4 rounded-full flex items-center justify-center">
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
-        )}
-      </button>
+      <CollabTooltip content="Open chat" side="left">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 hover:border-gray-700 hover:bg-gray-800/50 transition-all relative cursor-pointer"
+          aria-label="Open chat"
+        >
+          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+          <span className="text-xs text-gray-400 font-medium">Chat</span>
+          {unreadCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 bg-indigo-500 text-white text-xs font-bold w-4 h-4 rounded-full flex items-center justify-center">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </button>
+      </CollabTooltip>
     );
   }
 
@@ -82,15 +86,18 @@ export function ChatPanel({
           </svg>
           <span className="text-xs font-semibold text-gray-300">Chat</span>
         </div>
-        <button
-          onClick={onToggle}
-          className="text-gray-400 hover:text-white p-1 hover:bg-gray-800 rounded transition-colors"
-          title="Collapse chat"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+        <CollabTooltip content="Collapse chat" side="left">
+          <button
+            type="button"
+            onClick={onToggle}
+            className="text-gray-400 hover:text-white p-1 hover:bg-gray-800 rounded transition-colors cursor-pointer"
+            aria-label="Collapse chat"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </CollabTooltip>
       </div>
 
       {/* Messages */}

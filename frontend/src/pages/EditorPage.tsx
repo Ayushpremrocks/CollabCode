@@ -9,6 +9,7 @@ import { ChatPanel } from '../components/ChatPanel';
 import { AgentPanel } from '../components/AgentPanel';
 import { AgentDebugPanel } from '../components/AgentDebugPanel';
 import { HistoryModal } from '../components/HistoryModal';
+import { toast } from '../components/ui/CollabToast';
 import { useCollaboration } from '../hooks/useCollaboration';
 import { usePresence } from '../hooks/usePresence';
 import { useAuth } from '../contexts/AuthContext';
@@ -216,11 +217,12 @@ export function EditorPage() {
     try {
       const result = await roomService.toggleLock(roomCode, !isRoomLocked);
       setIsRoomLocked(result.locked);
+      toast.info(result.locked ? 'Room locked — editing restricted to host' : 'Room unlocked');
     } catch (e: unknown) {
       const err = e as { response?: { data?: { error?: string }; status?: number } };
       const msg = err.response?.data?.error || 'Failed to toggle room lock';
       console.error('Failed to toggle lock:', msg);
-      alert(msg); // Surface the error so it\'s not silently swallowed
+      toast.error(msg);
     }
   }, [roomCode, isRoomLocked]);
 
@@ -264,6 +266,7 @@ export function EditorPage() {
   const handleDownload = useCallback(() => {
     if (!language || !roomCode) return;
     downloadCode(yText.toString(), language, roomCode);
+    toast.success('Code file downloaded');
   }, [language, roomCode, yText]);
 
   // Feature 7: Send chat

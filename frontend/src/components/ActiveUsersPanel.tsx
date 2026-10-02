@@ -1,6 +1,7 @@
 
 import { useState } from 'react';
 import type { UserPresence } from '../types';
+import { CollabTooltip } from './ui/CollabTooltip';
 
 interface ActiveUsersPanelProps {
   users: UserPresence[];
@@ -39,20 +40,23 @@ export function ActiveUsersPanel({ users, currentUsername }: ActiveUsersPanelPro
             Active Users ({users.length})
           </h3>
         </div>
-        <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="text-gray-400 hover:text-white p-1 hover:bg-gray-800 rounded transition-colors"
-          title={isCollapsed ? "Expand active users" : "Collapse active users"}
-        >
-          <svg
-            className={`w-4 h-4 transition-transform ${isCollapsed ? 'rotate-180' : ''}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+        <CollabTooltip content={isCollapsed ? 'Expand active users' : 'Collapse active users'} side="left">
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="text-gray-400 hover:text-white p-1 hover:bg-gray-800 rounded transition-colors cursor-pointer"
+            aria-label={isCollapsed ? 'Expand active users' : 'Collapse active users'}
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+            <svg
+              className={`w-4 h-4 transition-transform ${isCollapsed ? 'rotate-180' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </CollabTooltip>
       </div>
 
       {!isCollapsed && (

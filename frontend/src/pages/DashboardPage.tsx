@@ -4,6 +4,18 @@ import { Navbar } from '../components/Navbar';
 import { roomService } from '../services/roomService';
 import type { Room } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  CollabAlertDialog,
+  CollabAlertDialogContent,
+  CollabAlertDialogHeader,
+  CollabAlertDialogTitle,
+  CollabAlertDialogDescription,
+  CollabAlertDialogFooter,
+  CollabAlertDialogCancel,
+  CollabAlertDialogAction,
+} from '../components/ui/CollabAlertDialog';
+import { CollabTooltip } from '../components/ui/CollabTooltip';
+import { toast } from '../components/ui/CollabToast';
 
 function formatExpiry(expiresAt: string | null): { text: string; warning: boolean } {
   if (!expiresAt) return { text: '', warning: false };
@@ -25,26 +37,31 @@ function CopyButton({ text }: { text: string }) {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
+      toast.success(`Room code ${text} copied to clipboard`);
       setTimeout(() => setCopied(false), 2000);
-    } catch {}
+    } catch {
+      toast.error('Failed to copy room code to clipboard');
+    }
   };
   return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      title="Copy room code"
-      className="p-1 text-gray-500 hover:text-gray-300 transition-colors rounded"
-    >
-      {copied ? (
-        <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-        </svg>
-      ) : (
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-        </svg>
-      )}
-    </button>
+    <CollabTooltip content={copied ? 'Copied!' : 'Copy room code'}>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="p-1 text-gray-500 hover:text-gray-300 transition-colors rounded cursor-pointer"
+        aria-label="Copy room code"
+      >
+        {copied ? (
+          <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        ) : (
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+        )}
+      </button>
+    </CollabTooltip>
   );
 }
 
@@ -128,9 +145,12 @@ export function DashboardPage() {
       await roomService.deleteRoom(roomCode);
       setRooms(prev => prev.filter(r => r.roomCode !== roomCode));
       setDeleteConfirm(null);
+      toast.success('Room deleted successfully');
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: string } } };
-      setError(error.response?.data?.error || 'Failed to delete room');
+      const msg = error.response?.data?.error || 'Failed to delete room';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setDeletingCode(null);
     }
@@ -259,37 +279,6 @@ export function DashboardPage() {
                     className="border rounded p-4 transition-all group relative cursor-pointer"
                     style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}
                   >
-                    {/* Delete confirm overlay */}
-                    {deleteConfirm === room.roomCode && (
-                      <div
-                        className="absolute inset-0 bg-gray-900/95 rounded-xl flex flex-col items-center justify-center gap-3 z-10 p-4"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <p className="text-white text-sm font-medium text-center">Delete "{room.name}"?</p>
-                        <p className="text-gray-400 text-xs text-center">This cannot be undone. All data will be lost.</p>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setDeleteConfirm(null)}
-                            className="px-3 py-1.5 text-sm text-gray-400 hover:text-white border border-gray-700 rounded-lg transition-colors"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteRoom(room.roomCode)}
-                            disabled={deletingCode === room.roomCode}
-                            className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                          >
-                            {deletingCode === room.roomCode ? (
-                              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            ) : null}
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
                     {/* Dedicated button for keyboard accessibility and primary click action */}
                     <button
                       type="button"
@@ -297,7 +286,7 @@ export function DashboardPage() {
                         e.stopPropagation();
                         navigate(`/room/${room.roomCode}`);
                       }}
-                      className="w-full text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-indigo-500 rounded"
+                      className="w-full text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-indigo-500 rounded cursor-pointer"
                     >
                       <div className="flex items-start justify-between gap-6 mb-2 pr-6">
                         <h3 className="text-sm font-medium transition-colors truncate" style={{ color: 'var(--cc-text)' }}>
@@ -334,19 +323,21 @@ export function DashboardPage() {
 
                     {/* Host delete button */}
                     {isOwner && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteConfirm(room.roomCode);
-                        }}
-                        className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                        title="Delete room"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
+                      <CollabTooltip content="Delete room">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirm(room.roomCode);
+                          }}
+                          className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-all cursor-pointer"
+                          aria-label="Delete room"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </CollabTooltip>
                     )}
                   </div>
                 );
@@ -355,6 +346,46 @@ export function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Confirmation Alert Dialog for Room Deletion */}
+      <CollabAlertDialog open={deleteConfirm !== null} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+        <CollabAlertDialogContent>
+          <CollabAlertDialogHeader>
+            <CollabAlertDialogTitle
+              icon={
+                <span className="w-6 h-6 rounded flex items-center justify-center shrink-0" style={{ background: 'var(--cc-error-dim)', color: 'var(--cc-error)' }}>
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </span>
+              }
+            >
+              Delete Room?
+            </CollabAlertDialogTitle>
+            <CollabAlertDialogDescription>
+              Are you sure you want to delete room{' '}
+              <span className="font-mono text-white font-semibold">
+                &ldquo;{rooms.find((r) => r.roomCode === deleteConfirm)?.name || deleteConfirm}&rdquo;
+              </span>
+              ? All collaborative history, active sessions, and editor snapshots will be permanently removed. This action cannot be undone.
+            </CollabAlertDialogDescription>
+          </CollabAlertDialogHeader>
+          <CollabAlertDialogFooter>
+            <CollabAlertDialogCancel>Keep Room</CollabAlertDialogCancel>
+            <CollabAlertDialogAction
+              variant="destructive"
+              loading={deletingCode !== null}
+              onClick={async () => {
+                if (deleteConfirm) {
+                  await handleDeleteRoom(deleteConfirm);
+                }
+              }}
+            >
+              Delete Room
+            </CollabAlertDialogAction>
+          </CollabAlertDialogFooter>
+        </CollabAlertDialogContent>
+      </CollabAlertDialog>
     </div>
   );
 }

@@ -3,6 +3,8 @@ import { AuthProvider } from './contexts/AuthContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { AuthenticateWithRedirectCallback } from '@clerk/clerk-react';
+import { CollabToastProvider } from './components/ui/CollabToast';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -15,11 +17,21 @@ function App() {
       <AuthProvider>
         <ThemeProvider>
           <WebSocketProvider>
-            <Routes>
+            <CollabToastProvider>
+              <Routes>
               {/* Public routes */}
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route
+                path="/sso-callback"
+                element={
+                  <AuthenticateWithRedirectCallback
+                    signInForceRedirectUrl="/dashboard"
+                    signUpForceRedirectUrl="/dashboard"
+                  />
+                }
+              />
 
               {/* Protected routes */}
               <Route
@@ -42,7 +54,8 @@ function App() {
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-          </WebSocketProvider>
+          </CollabToastProvider>
+        </WebSocketProvider>
         </ThemeProvider>
       </AuthProvider>
     </BrowserRouter>
