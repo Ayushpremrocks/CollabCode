@@ -361,17 +361,7 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
             </svg>
           </div>
           <span className="font-semibold text-base tracking-tight" style={{ color: 'var(--cc-text)' }}>
-            CollabCode
-          </span>
-          <span
-            className="hidden sm:inline-block text-[11px] font-mono px-2 py-0.5 rounded border"
-            style={{
-              background: 'var(--cc-surface-el)',
-              borderColor: 'var(--cc-border)',
-              color: 'var(--cc-text-muted)',
-            }}
-          >
-            v1.2
+            CodeCollab
           </span>
         </Link>
 
