@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Client } from '@stomp/stompjs';
 import { useAuth } from './AuthContext';
 
@@ -9,86 +9,65 @@ interface WebSocketContextType {
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
+const STOMP_URL = `${import.meta.env.VITE_WS_BASE_URL ?? 'ws://localhost:8080'}/ws/stomp`;
 
 export function WebSocketProvider({ children }: { children: ReactNode }) {
-  const clientRef = useRef<Client | null>(null);
-  const [connected, setConnected] = useState(false);
   const { isAuthenticated, getToken } = useAuth();
+  const [client, setClient] = useState<Client | null>(null);
+  const [connected, setConnected] = useState(false);
+
+  // Read the latest getter at connect time without reconnecting when it changes.
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      if (clientRef.current) {
-        clientRef.current.deactivate();
-        clientRef.current = null;
-        setConnected(false);
-      }
-      return;
-    }
+    if (!isAuthenticated) return;
 
-    // Clerk's getToken() is async — set up STOMP after we have a fresh token
-    const setupStomp = async () => {
-      const token = await getToken();
-      if (!token) {
-        console.warn('[STOMP] No Clerk session token — skipping STOMP connection');
-        return;
-      }
-
-      const client = new Client({
-        brokerURL: `${import.meta.env.VITE_WS_BASE_URL ?? 'ws://localhost:8080'}/ws/stomp`,
-        connectHeaders: {
-          Authorization: `Bearer ${token}`,
-        },
-        reconnectDelay: 5000,
-        heartbeatIncoming: 10000,
-        heartbeatOutgoing: 10000,
-        onConnect: () => {
-          console.log('[STOMP] Connected');
-          setConnected(true);
-        },
-        onDisconnect: () => {
-          console.log('[STOMP] Disconnected');
-          setConnected(false);
-        },
-        onStompError: (frame) => {
-          console.error('[STOMP] Error:', frame.headers.message);
-        },
-      });
-
-      client.activate();
-      clientRef.current = client;
-    };
-
-    setupStomp();
+    const stomp = new Client({
+      brokerURL: STOMP_URL,
+      reconnectDelay: 5000,
+      heartbeatIncoming: 10000,
+      heartbeatOutgoing: 10000,
+      // Runs before EVERY connect, including automatic reconnects. Clerk tokens
+      // expire after ~60 s, so reusing the first token made every reconnect fail.
+      beforeConnect: async (c) => {
+        const token = await getTokenRef.current({ fresh: true }).catch(() => null);
+        c.connectHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+      },
+      onConnect: () => setConnected(true),
+      onDisconnect: () => setConnected(false),
+      onWebSocketClose: () => setConnected(false),
+      onStompError: (frame) => console.error('[STOMP] Error:', frame.headers.message),
+    });
+    stomp.activate();
+    // Publishing the client is a subscription to an external system.
+    queueMicrotask(() => setClient(stomp));
 
     return () => {
-      if (clientRef.current) {
-        clientRef.current.deactivate();
-        clientRef.current = null;
-        setConnected(false);
-      }
+      void stomp.deactivate();
+      setClient((current) => (current === stomp ? null : current));
+      setConnected(false);
     };
-  }, [isAuthenticated, getToken]);
+  }, [isAuthenticated]);
 
   const publish = useCallback((destination: string, body: unknown) => {
-    if (clientRef.current?.connected) {
-      clientRef.current.publish({
-        destination,
-        body: JSON.stringify(body),
-      });
-    }
-  }, []);
+    if (client?.connected) client.publish({ destination, body: JSON.stringify(body) });
+  }, [client]);
 
-  return (
-    <WebSocketContext.Provider value={{ stompClient: clientRef.current, connected, publish }}>
-      {children}
-    </WebSocketContext.Provider>
-  );
+  const value = useMemo(() => ({
+    stompClient: isAuthenticated ? client : null,
+    connected: isAuthenticated && connected,
+    publish,
+  }), [client, connected, isAuthenticated, publish]);
+
+  return <WebSocketContext.Provider value={value}>{children}</WebSocketContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useWebSocket() {
   const context = useContext(WebSocketContext);
-  if (!context) {
-    throw new Error('useWebSocket must be used within a WebSocketProvider');
-  }
+  if (!context) throw new Error('useWebSocket must be used within a WebSocketProvider');
   return context;
 }

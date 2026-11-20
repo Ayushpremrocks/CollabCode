@@ -3,8 +3,8 @@
 > Real-time collaborative code editor with an integrated autonomous AI debugging agent powered by Google Gemini and execution-feedback verification.
 
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.3.5-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
 [![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
@@ -41,8 +41,11 @@ Modern software development is inherently collaborative, yet debugging collabora
 ### Collaborative Editor
 - **Real-Time Multi-User Editing:** Powered by **Yjs** CRDTs (`y-monaco`, `y-protocols`). Multiple developers can concurrently edit the same document with zero merge conflicts or lost keystrokes.
 - **Room-Based Collaboration:** Instant 8-character shareable room codes. Rooms persist across disconnects and support up to 48 hours of activity.
-- **Visual Presence & Authorship:** Live participant avatars, display names, deterministic per-user cursor colors, and line-level gutter authorship markers.
-- **In-Editor Chat & Host Controls:** Built-in messaging panel, room locking (prevent new joins), read-only mode (for presentations), and safe room deletion.
+- **Live Cursors & Presence:** Every collaborator's cursor and selection is shown with their name and a per-user colour (Yjs awareness). The same colour is used in the participant list.
+- **Line Authorship:** A coloured bar in the gutter shows who wrote each line; hover it for the author (and each contributor's share). "Show Line Authors" adds blame-style name labels. Authorship is stored in the shared document itself, so it syncs live and survives reloads.
+- **Host Controls:** *Host-only editing* (everyone else can watch but not edit — enforced by the server, not just the UI), *room lock* (people who never joined cannot join), and room deletion.
+- **In-Editor Chat:** Messaging panel; the last 100 messages are kept so a refresh or late joiner sees the conversation.
+- **Version History:** Snapshots are saved whenever the document changes (at most once a minute, and when the last person leaves). Restoring a snapshot is applied as a live edit, so everyone sees it immediately.
 
 ### AI Agent
 - **In-Context Q&A:** Ask questions about your code, explain complex algorithms, and analyze logic errors directly in the editor.
@@ -86,7 +89,7 @@ The flagship agentic capability of CollabCode. Rather than offering static code 
 ```text
 Browser Client (React 19 + Monaco + Yjs)
   │
-  ├──► Raw Binary WebSocket (/ws/yjs/{roomCode}) ──► YjsWebSocketHandler (Binary CRDT Relay)
+  ├──► Raw Binary WebSocket (/ws/yjs/{roomCode}) ──► YjsWebSocketHandler → YjsRoom (update log + replay)
   │                                                        │
   │                                                        ▼
   │                                                   Neon PostgreSQL (Snapshots)
@@ -106,6 +109,22 @@ Browser Client (React 19 + Monaco + Yjs)
                                                                       ▼
                                                                  Wandbox API (Sandbox Execution)
 ```
+
+### Real-time sync design
+
+The server cannot merge Yjs updates (there is no maintained Java Yjs), so each room keeps
+an in-memory **base state + update log** (`YjsRoom`):
+
+1. A client that connects receives the base and then **every** logged update, so it always ends up
+   with the complete document. (Previously joiners only got a ~30 s old snapshot; later edits that
+   depended on missing ones stayed "pending" in Yjs, which is why text appeared on the wrong line.)
+2. Clients periodically send their full state with an **ack** = number of updates they had applied.
+   The server knows exactly which log entries that state contains and compacts only those.
+3. On (re)connect a client also pushes its full state, so edits made while offline — or lost by a
+   backend restart — are never dropped.
+4. Changed documents are persisted at most once a minute, when the last user leaves, and on shutdown.
+
+Frame format: see `backend/.../websocket/yjs/YjsProtocol.java` and `frontend/src/services/collaborationService.ts`.
 
 ---
 
@@ -161,7 +180,7 @@ Unlike simple AI chatbots or autocomplete extensions:
 
 ### Frontend
 - **Framework & Language:** React 19, TypeScript
-- **Bundler:** Vite 6
+- **Bundler:** Vite 8
 - **Styling:** Tailwind CSS v4
 - **Editor:** Monaco Editor (`@monaco-editor/react`)
 - **CRDT Synchronization:** Yjs, `y-monaco`, `y-protocols`, `lib0`
@@ -215,20 +234,12 @@ Unlike simple AI chatbots or autocomplete extensions:
    SPRING_DATASOURCE_USERNAME=your_db_username
    SPRING_DATASOURCE_PASSWORD=your_db_password
    CLERK_JWKS_URI=https://your-clerk-app.clerk.accounts.dev/.well-known/jwks.json
-   JWT_SECRET=your_minimum_32_character_jwt_secret
    ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174
    SPRING_SQL_INIT_MODE=always
    GEMINI_API_KEY=your_gemini_api_key
    ```
 4. Run the Spring Boot application:
-   ```powershell
-   # Windows PowerShell
-   .\mvnw.cmd spring-boot:run
-
-   # Linux / macOS
-   ./mvnw spring-boot:run
-
-   # Or standard Maven
+   ```bash
    mvn spring-boot:run
    ```
    The backend will start at `http://localhost:8080`.
@@ -278,9 +289,49 @@ Unlike simple AI chatbots or autocomplete extensions:
 | `SPRING_DATASOURCE_PASSWORD` | Database password |
 | `CLERK_JWKS_URI` | Clerk `.well-known/jwks.json` endpoint for JWT validation |
 | `GEMINI_API_KEY` | Google Gemini API key (backend-only, never logged or committed) |
-| `JWT_SECRET` | Secret key for internal token management |
+| `GEMINI_MODEL` | *(optional)* Gemini model id, default `gemini-3.6-flash` |
+| `YJS_FLUSH_INTERVAL_MS` | *(optional)* How often changed documents are saved, default `60000` |
+| `RATE_LIMIT_EXECUTE_PER_MINUTE` / `RATE_LIMIT_AGENT_PER_MINUTE` | *(optional)* Per-user limits, default `20` / `6` |
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins |
 | `SPRING_SQL_INIT_MODE` | SQL schema initialization mode (`always` or `never`) |
+
+---
+
+## Testing
+
+```bash
+# Backend unit + integration tests (no database or network needed)
+cd backend && mvn test
+
+# Cross-stack end-to-end: starts the real Java Yjs relay and drives it with the
+# frontend's real CollaborationProvider (needs Node + frontend node_modules)
+cd backend && mvn test -Dtest=YjsRelayE2ETest -De2e=true
+
+# Frontend unit tests, type-check, lint
+cd frontend && npm test && npx tsc -b && npm run lint
+```
+
+The end-to-end suite covers concurrent edits on different lines (with line shifts and a late
+joiner), offline edits, a backend restart, host-only mode, expired-token retry, non-members,
+documents larger than 8 KB, cursor removal and persistence.
+
+---
+
+## Deployment Checklist (Vercel + Render + Clerk)
+
+- **Same Clerk instance on both sides.** The instance encoded in `VITE_CLERK_PUBLISHABLE_KEY` (Vercel)
+  must be the one whose JWKS URL is in `CLERK_JWKS_URI` (Render). A mismatch makes every API call a 401.
+- **`ALLOWED_ORIGINS`** on Render must contain the exact Vercel origin (no trailing slash). It is used
+  for CORS *and* both WebSocket endpoints.
+- **Vercel env vars** are baked in at build time — redeploy after changing them.
+- **Clerk development keys (`pk_test_…`)** work on `*.vercel.app` but show a "development mode" badge and
+  have user limits. A Clerk *production* instance requires a custom domain you own.
+- **Optional:** add `username`/`email` claims to the session token (Clerk Dashboard → Sessions →
+  Customize session token: `{"username": "{{user.username}}", "email": "{{user.primary_email_address}}"}`)
+  so new users get readable usernames instead of `user_xxxxxxx`.
+- **Render free tier** sleeps after ~15 min idle and can take 1–2 minutes to wake. The frontend pings
+  `/api/health` on load, shows a "server is waking up" notice, and retries requests whose token expired
+  while waiting.
 
 ---
 
@@ -289,6 +340,8 @@ Unlike simple AI chatbots or autocomplete extensions:
 - **Backend-Only AI Secrets:** The `GEMINI_API_KEY` is loaded exclusively by Spring Boot via environment variables. It has no frontend equivalent (`no VITE_* var`), is never sent to the browser, and is excluded from logs.
 - **Git-Ignored Secrets:** `backend/.env` is tracked in `.gitignore` and never committed to version control. `backend/.env.example` provides a sanitized template.
 - **Authenticated Endpoints:** All `/api/agent/*` and `/api/rooms/*` endpoints require a valid Clerk JWT verified via cryptographic JWKS public keys.
+- **Room Membership Everywhere:** Room details, snapshots, chat history, the Yjs socket and every STOMP subscription/message require the user to have joined the room. Host actions (delete, lock, host-only editing) are checked before anything is broadcast.
+- **Rate Limits:** Code execution and AI endpoints are limited per user.
 - **Atomic Document Updates:** Patches applied from the agent occur through transactional Yjs operations (`yText.doc.transact`), preventing race conditions.
 
 ---
@@ -324,6 +377,7 @@ Follow these steps to observe the end-to-end agentic workflow:
 - **Quota & Availability:** Gemini API response times depend on Google AI service availability and API tier quotas.
 - **Bounded Iteration Limit:** The agent loop is constrained to a maximum of 3 iterations (`MAX_ITERATIONS = 3`) to prevent infinite execution cycles and conserve API quota.
 - **Single Document Buffer:** Collaboration currently operates on a single Monaco editor buffer per room.
+- **Single Backend Instance:** Live room state (update log, presence, chat history, rate limits) is in memory, so the backend must run as one instance. Chat history does not survive a backend restart.
 
 ---
 

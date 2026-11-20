@@ -13,12 +13,19 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
+/**
+ * Persists Yjs document snapshots and the room language.
+ *
+ * Snapshots are written by the Yjs relay (YjsRoomManager), which throttles writes
+ * and only persists when the document actually changed. "Restore" is performed by
+ * the host's browser as a normal collaborative edit, so every connected user sees
+ * it immediately; this service therefore only reads history.
+ */
 @Service
 public class DocumentService {
 
-    private static final int MAX_SNAPSHOTS = 20;
+    static final int MAX_SNAPSHOTS = 30;
 
     public static final Set<String> SUPPORTED_LANGUAGES = Set.of(
             "javascript", "typescript", "python", "java", "cpp", "c", "csharp",
@@ -38,54 +45,49 @@ public class DocumentService {
         this.roomService = roomService;
     }
 
-    /** Returns the latest snapshot for a room (for Yjs load) */
-    public Optional<DocumentSnapshot> getSnapshot(String roomCode) {
+    /** Latest persisted document state for a room (used to seed the Yjs relay). */
+    @Transactional(readOnly = true)
+    public Optional<byte[]> getLatestDocument(String roomCode) {
+        return roomRepository.findByRoomCode(roomCode)
+                .flatMap(room -> snapshotRepository.findTopByRoomIdOrderByUpdatedAtDesc(room.getId()))
+                .map(DocumentSnapshot::getDocumentData);
+    }
+
+    /** A snapshot by id, but only if it belongs to the given room (prevents cross-room reads). */
+    @Transactional(readOnly = true)
+    public Optional<DocumentSnapshot> getSnapshotForRoom(String roomCode, Long snapshotId) {
         Room room = roomRepository.findByRoomCode(roomCode).orElse(null);
         if (room == null) return Optional.empty();
-        return snapshotRepository.findTopByRoomIdOrderByUpdatedAtDesc(room.getId());
+        return snapshotRepository.findById(snapshotId)
+                .filter(s -> s.getRoom().getId().equals(room.getId()));
     }
 
-    /** Get a specific snapshot by ID (for history preview) */
-    public Optional<DocumentSnapshot> getSnapshotById(Long snapshotId) {
-        return snapshotRepository.findById(snapshotId);
-    }
-
-    /** Saves a new snapshot entry and prunes beyond MAX_SNAPSHOTS */
+    /** Saves a new snapshot entry and prunes beyond MAX_SNAPSHOTS. */
     @Transactional
     public void saveSnapshot(String roomCode, byte[] documentData) {
-        Room room = roomRepository.findByRoomCode(roomCode)
-                .orElseThrow(() -> new IllegalArgumentException("Room not found: " + roomCode));
+        Room room = roomRepository.findByRoomCode(roomCode).orElse(null);
+        if (room == null) return; // room was deleted while the relay still held it
 
-        // Get current language
-        String language = snapshotRepository
-                .findTopByRoomIdOrderByUpdatedAtDesc(room.getId())
+        String language = snapshotRepository.findTopByRoomIdOrderByUpdatedAtDesc(room.getId())
                 .map(DocumentSnapshot::getLanguage)
                 .orElse("javascript");
 
-        DocumentSnapshot snapshot = DocumentSnapshot.builder()
+        snapshotRepository.save(DocumentSnapshot.builder()
                 .room(room)
                 .documentData(documentData)
                 .language(language)
-                .snapshotLabel("Auto-saved at " + Instant.now().toString().substring(0, 19).replace("T", " "))
-                .build();
-        snapshotRepository.save(snapshot);
+                .snapshotLabel("Auto-saved")
+                .build());
 
-        // Update room's last active time
         roomService.updateLastActive(roomCode);
-
-        // Prune to MAX_SNAPSHOTS
         pruneSnapshots(room.getId());
     }
 
-    /** Prune oldest snapshots beyond MAX_SNAPSHOTS */
     private void pruneSnapshots(Long roomId) {
         long count = snapshotRepository.countByRoomId(roomId);
         if (count > MAX_SNAPSHOTS) {
-            List<DocumentSnapshot> ordered = snapshotRepository.findByRoomIdOrderByUpdatedAtAsc(roomId);
-            long toDelete = count - MAX_SNAPSHOTS;
-            for (int i = 0; i < toDelete && i < ordered.size(); i++) {
-                snapshotRepository.delete(ordered.get(i));
-            }
+            List<DocumentSnapshot> oldestFirst = snapshotRepository.findByRoomIdOrderByUpdatedAtAsc(roomId);
+            snapshotRepository.deleteAll(oldestFirst.subList(0, (int) (count - MAX_SNAPSHOTS)));
         }
     }
 
@@ -98,71 +100,45 @@ public class DocumentService {
         if (!isSupportedLanguage(language)) {
             throw new IllegalArgumentException("Unsupported language: " + language);
         }
-
         Room room = roomRepository.findByRoomCode(roomCode)
                 .orElseThrow(() -> new IllegalArgumentException("Room not found: " + roomCode));
 
-        // Update language on the latest snapshot, or create a minimal one
         Optional<DocumentSnapshot> latest = snapshotRepository.findTopByRoomIdOrderByUpdatedAtDesc(room.getId());
-
         if (latest.isPresent()) {
-            DocumentSnapshot snapshot = latest.get();
-            snapshot.setLanguage(language);
-            snapshotRepository.save(snapshot);
+            latest.get().setLanguage(language);
+            snapshotRepository.save(latest.get());
         } else {
-            DocumentSnapshot snapshot = DocumentSnapshot.builder()
+            snapshotRepository.save(DocumentSnapshot.builder()
                     .room(room)
                     .language(language)
                     .snapshotLabel("Initial")
-                    .build();
-            snapshotRepository.save(snapshot);
+                    .build());
         }
     }
 
+    @Transactional(readOnly = true)
     public String getLanguage(String roomCode) {
-        return getSnapshot(roomCode)
+        return roomRepository.findByRoomCode(roomCode)
+                .flatMap(room -> snapshotRepository.findTopByRoomIdOrderByUpdatedAtDesc(room.getId()))
                 .map(DocumentSnapshot::getLanguage)
                 .filter(this::isSupportedLanguage)
                 .orElse("javascript");
     }
 
-    /** Get all snapshot metadata (no document data) for the history panel */
+    /** Snapshot metadata (no document bytes) for the history panel, newest first. */
+    @Transactional(readOnly = true)
     public List<SnapshotDTO> getSnapshotHistory(String roomCode) {
         Room room = roomRepository.findByRoomCode(roomCode)
                 .orElseThrow(() -> new IllegalArgumentException("Room not found: " + roomCode));
 
-        return snapshotRepository.findByRoomIdOrderByUpdatedAtDesc(room.getId())
-                .stream()
+        return snapshotRepository.findByRoomIdOrderByUpdatedAtDesc(room.getId()).stream()
+                .filter(s -> s.getDocumentData() != null && s.getDocumentData().length > 0)
                 .map(s -> SnapshotDTO.builder()
                         .id(s.getId())
-                        .updatedAt(s.getUpdatedAt())
+                        .updatedAt(s.getUpdatedAt() != null ? s.getUpdatedAt() : Instant.EPOCH)
                         .language(s.getLanguage())
                         .snapshotLabel(s.getSnapshotLabel() != null ? s.getSnapshotLabel() : "Snapshot")
                         .build())
-                .collect(Collectors.toList());
-    }
-
-    /** Restore a snapshot: create a new "current" snapshot copying the selected one's data */
-    @Transactional
-    public void restoreSnapshot(String roomCode, Long snapshotId) {
-        Room room = roomRepository.findByRoomCode(roomCode)
-                .orElseThrow(() -> new IllegalArgumentException("Room not found: " + roomCode));
-
-        DocumentSnapshot target = snapshotRepository.findById(snapshotId)
-                .orElseThrow(() -> new IllegalArgumentException("Snapshot not found: " + snapshotId));
-
-        if (!target.getRoom().getId().equals(room.getId())) {
-            throw new IllegalArgumentException("Snapshot does not belong to this room");
-        }
-
-        DocumentSnapshot restored = DocumentSnapshot.builder()
-                .room(room)
-                .documentData(target.getDocumentData())
-                .language(target.getLanguage())
-                .snapshotLabel("Restored from " + target.getUpdatedAt().toString().substring(0, 10))
-                .build();
-        snapshotRepository.save(restored);
-
-        pruneSnapshots(room.getId());
+                .toList();
     }
 }

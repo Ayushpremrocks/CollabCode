@@ -22,6 +22,7 @@ public class RoomResponse {
     private Instant createdAt;
     private Instant expiresAt;
     private boolean isLocked;
+    private boolean readOnly;
     private List<String> participants;
     private String language;
 }

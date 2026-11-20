@@ -1,68 +1,95 @@
-import { createContext, useContext, useCallback, type ReactNode } from 'react';
-import {
-  useAuth as useClerkAuth,
-  useUser,
-  useClerk,
-} from '@clerk/clerk-react';
-import { setClerkTokenGetter } from '../services/api';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useAuth as useClerkAuth, useClerk, useUser } from '@clerk/clerk-react';
+import api, { setTokenGetter, type TokenGetter } from '../services/api';
+
+export interface AppUser {
+  /** Local database id (0 until /users/me has loaded). */
+  userId: number;
+  /**
+   * The backend's username for this user — the same value the server puts in chat
+   * messages, presence and room ownership. Falls back to the email prefix until loaded.
+   */
+  username: string;
+  /** Human-friendly name for display. */
+  displayName: string;
+  email: string;
+  imageUrl: string;
+  clerkUserId: string;
+}
 
 interface AuthContextType {
-  user: { userId: number; username: string; email: string; clerkUserId: string } | null;
+  user: AppUser | null;
   isAuthenticated: boolean;
   loading: boolean;
-  login: (data: unknown) => Promise<void>;
-  register: (data: unknown) => Promise<void>;
-  logout: () => void;
-  getToken: () => Promise<string | null>;
+  logout: () => Promise<void>;
+  getToken: TokenGetter;
+}
+
+interface BackendMe {
+  clerkUserId: string;
+  id: number;
+  username: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { isSignedIn, isLoaded, getToken } = useClerkAuth();
+  const { isSignedIn, isLoaded, getToken: clerkGetToken } = useClerkAuth();
   const { user: clerkUser } = useUser();
   const { signOut } = useClerk();
+  const [me, setMe] = useState<BackendMe | null>(null);
 
-  // Stable reference to Clerk's getToken so the Axios interceptor always
-  // calls the latest version without stale closures.
-  const stableGetToken = useCallback(
-    () => getToken(),
-    [getToken]
+  const getToken = useCallback<TokenGetter>(
+    (options) => clerkGetToken(options?.fresh ? { skipCache: true } : undefined),
+    [clerkGetToken],
   );
 
-  // Set synchronously during render so child components can use it immediately on mount
-  setClerkTokenGetter(stableGetToken);
+  useEffect(() => {
+    setTokenGetter(isSignedIn ? getToken : null);
+  }, [getToken, isSignedIn]);
 
-  const user = clerkUser
-    ? {
-        userId: 0,
-        username: clerkUser.primaryEmailAddress?.emailAddress?.split('@')[0] || 'User',
-        email: clerkUser.primaryEmailAddress?.emailAddress || '',
-        clerkUserId: clerkUser.id,
-      }
-    : null;
+  const clerkUserId = clerkUser?.id;
+  useEffect(() => {
+    if (!isSignedIn || !clerkUserId) return;
+    let cancelled = false;
+    api.get<{ id: number; username: string }>('/users/me')
+      .then((res) => {
+        if (!cancelled) setMe({ clerkUserId, id: res.data.id, username: res.data.username });
+      })
+      .catch((err) => console.warn('[Auth] Could not load backend profile', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn, clerkUserId]);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAuthenticated: isSignedIn ?? false,
-        loading: !isLoaded,
-        login: async () => {},
-        register: async () => {},
-        logout: () => signOut(),
-        getToken: stableGetToken,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+  const user = useMemo<AppUser | null>(() => {
+    if (!clerkUser) return null;
+    const email = clerkUser.primaryEmailAddress?.emailAddress ?? '';
+    const backend = me && me.clerkUserId === clerkUser.id ? me : null;
+    return {
+      userId: backend?.id ?? 0,
+      username: backend?.username ?? (email.split('@')[0] || 'user'),
+      displayName: clerkUser.fullName || clerkUser.firstName || clerkUser.username || email.split('@')[0] || 'User',
+      email,
+      imageUrl: clerkUser.imageUrl ?? '',
+      clerkUserId: clerkUser.id,
+    };
+  }, [clerkUser, me]);
+
+  const value = useMemo<AuthContextType>(() => ({
+    user,
+    isAuthenticated: isSignedIn ?? false,
+    loading: !isLoaded,
+    logout: () => signOut(),
+    getToken,
+  }), [user, isSignedIn, isLoaded, signOut, getToken]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 }

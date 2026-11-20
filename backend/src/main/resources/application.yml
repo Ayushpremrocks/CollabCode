@@ -1,4 +1,5 @@
 server:
+  shutdown: graceful
   port: ${PORT:8080}
 
 spring:
@@ -30,16 +31,24 @@ spring:
 
 app:
   clerk:
+    # Clerk Dashboard → API Keys → "JWKS URL". Must belong to the SAME Clerk instance
+    # as the frontend's VITE_CLERK_PUBLISHABLE_KEY, otherwise every request is a 401.
     jwks-uri: ${CLERK_JWKS_URI}
 
-  jwt:
-    secret: ${JWT_SECRET}
-    expiration-ms: 86400000
-
   cors:
+    # Comma-separated. Also used as the allowed origins for both WebSocket endpoints.
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174,https://collab-code-application.vercel.app}
 
   gemini:
-    # Loaded from GEMINI_API_KEY env var (backend/.env locally, Render env var in production).
+    # Loaded from GEMINI_API_KEY (backend/.env locally, Render env var in production).
     # NEVER expose this to the frontend. No VITE_ equivalent should ever exist.
     api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-3.6-flash}
+
+  yjs:
+    # How often changed documents are persisted to the database.
+    flush-interval-ms: ${YJS_FLUSH_INTERVAL_MS:60000}
+
+  rate-limit:
+    execute-per-minute: ${RATE_LIMIT_EXECUTE_PER_MINUTE:20}
+    agent-per-minute: ${RATE_LIMIT_AGENT_PER_MINUTE:6}

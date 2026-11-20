@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Editor from '@monaco-editor/react';
 import * as Y from 'yjs';
 import type { SnapshotInfo } from '../types';
@@ -22,12 +22,15 @@ import {
   CollabAlertDialogAction,
 } from './ui/CollabAlertDialog';
 import { toast } from './ui/CollabToast';
+import { apiErrorMessage } from '../services/api';
 
 interface HistoryModalProps {
   roomCode: string;
-  isHost: boolean;
+  /** False for collaborators while the room is host-only. */
+  canRestore: boolean;
   onClose: () => void;
-  onRestored: () => void;
+  /** Applies the snapshot to the shared document (a normal collaborative edit). */
+  onRestore: (code: string, language: string) => void;
 }
 
 function formatDate(iso: string): string {
@@ -38,27 +41,16 @@ function formatDate(iso: string): string {
   }
 }
 
-export function HistoryModal({ roomCode, isHost, onClose, onRestored }: HistoryModalProps) {
+export function HistoryModal({ roomCode, canRestore, onClose, onRestore }: HistoryModalProps) {
   const [snapshots, setSnapshots] = useState<SnapshotInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [previewCode, setPreviewCode] = useState<string>('');
   const [previewLanguage, setPreviewLanguage] = useState<string>('javascript');
   const [loadingPreview, setLoadingPreview] = useState(false);
-  const [restoring, setRestoring] = useState(false);
   const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false);
 
-  useEffect(() => {
-    roomService.getSnapshots(roomCode)
-      .then(list => {
-        setSnapshots(list);
-        if (list.length > 0) selectSnapshot(list[0].id);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [roomCode]);
-
-  const selectSnapshot = async (id: number) => {
+  const selectSnapshot = useCallback(async (id: number) => {
     setSelectedId(id);
     setLoadingPreview(true);
     try {
@@ -80,23 +72,31 @@ export function HistoryModal({ roomCode, isHost, onClose, onRestored }: HistoryM
     } finally {
       setLoadingPreview(false);
     }
-  };
+  }, [roomCode]);
 
-  const handleConfirmRestore = async () => {
-    if (!selectedId) return;
-    setRestoring(true);
-    try {
-      await roomService.restoreSnapshot(roomCode, selectedId);
-      toast.success('Room restored to snapshot version');
-      onRestored();
-      onClose();
-    } catch (e) {
-      console.error('Restore failed', e);
-      toast.error('Failed to restore snapshot. Please try again.');
-    } finally {
-      setRestoring(false);
-      setConfirmRestoreOpen(false);
-    }
+  useEffect(() => {
+    let cancelled = false;
+    roomService.getSnapshots(roomCode)
+      .then((list) => {
+        if (cancelled) return;
+        setSnapshots(list);
+        if (list.length > 0) void selectSnapshot(list[0].id);
+      })
+      .catch((err) => toast.error(apiErrorMessage(err, 'Failed to load history')))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [roomCode, selectSnapshot]);
+
+  const handleConfirmRestore = () => {
+    if (!selectedId || loadingPreview) return;
+    onRestore(previewCode, previewLanguage);
+    toast.success('Snapshot restored for everyone in the room');
+    setConfirmRestoreOpen(false);
+    onClose();
   };
 
   const monacoLang = isSupportedLanguage(previewLanguage)
@@ -186,10 +186,10 @@ export function HistoryModal({ roomCode, isHost, onClose, onRestored }: HistoryM
           </div>
 
           {/* Footer */}
-          {isHost && selectedId && (
+          {canRestore && selectedId && (
             <div className="flex items-center justify-between gap-3 px-6 py-3.5 border-t bg-[#0A0E14]" style={{ borderColor: 'var(--cc-border)' }}>
               <p className="text-xs font-mono" style={{ color: 'var(--cc-text-muted)' }}>
-                Restoring replaces current shared room code with this snapshot.
+                Restoring replaces the shared code for everyone. You can undo it by restoring a newer snapshot.
               </p>
               <div className="flex items-center gap-2.5">
                 <button
@@ -203,7 +203,7 @@ export function HistoryModal({ roomCode, isHost, onClose, onRestored }: HistoryM
                 <button
                   type="button"
                   onClick={() => setConfirmRestoreOpen(true)}
-                  disabled={restoring}
+                  disabled={loadingPreview}
                   className="disabled:opacity-50 px-3.5 py-1.5 rounded text-xs font-semibold uppercase tracking-wider transition-colors flex items-center gap-2 cursor-pointer hover:brightness-110"
                   style={{ background: 'var(--cc-accent)', color: '#0D1117' }}
                 >
@@ -245,7 +245,6 @@ export function HistoryModal({ roomCode, isHost, onClose, onRestored }: HistoryM
             <CollabAlertDialogCancel>Keep Current Code</CollabAlertDialogCancel>
             <CollabAlertDialogAction
               variant="primary"
-              loading={restoring}
               onClick={handleConfirmRestore}
             >
               Confirm Restore

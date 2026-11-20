@@ -87,28 +87,37 @@ export function CollabTooltip({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [visible]);
 
-  // Clean child cloning
-  const child = React.cloneElement(children as React.ReactElement<any>, {
+  // Clean child cloning. In React 19 a child's ref is an ordinary prop.
+  type ChildProps = {
+    ref?: React.Ref<HTMLElement>;
+    onMouseEnter?: (e: React.MouseEvent) => void;
+    onMouseLeave?: (e: React.MouseEvent) => void;
+    onFocus?: (e: React.FocusEvent) => void;
+    onBlur?: (e: React.FocusEvent) => void;
+  };
+  const original = children as React.ReactElement<ChildProps>;
+  const child = React.cloneElement(original as React.ReactElement<Record<string, unknown>>, {
     ref: (node: HTMLElement | null) => {
       triggerRef.current = node;
-      const { ref } = children as any;
+      const ref = original.props.ref;
       if (typeof ref === 'function') ref(node);
-      else if (ref) ref.current = node;
+      // eslint-disable-next-line react-hooks/immutability -- forwarding a ref object is the purpose here
+      else if (ref) (ref as React.RefObject<HTMLElement | null>).current = node;
     },
     onMouseEnter: (e: React.MouseEvent) => {
-      (children as any).props?.onMouseEnter?.(e);
+      original.props.onMouseEnter?.(e);
       handleMouseEnter();
     },
     onMouseLeave: (e: React.MouseEvent) => {
-      (children as any).props?.onMouseLeave?.(e);
+      original.props.onMouseLeave?.(e);
       handleMouseLeave();
     },
     onFocus: (e: React.FocusEvent) => {
-      (children as any).props?.onFocus?.(e);
+      original.props.onFocus?.(e);
       handleFocus();
     },
     onBlur: (e: React.FocusEvent) => {
-      (children as any).props?.onBlur?.(e);
+      original.props.onBlur?.(e);
       handleBlur();
     },
     'aria-describedby': visible ? tooltipId : undefined,

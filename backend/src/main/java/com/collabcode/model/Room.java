@@ -40,6 +40,11 @@ public class Room {
     @Builder.Default
     private boolean isLocked = false;
 
+    /** Host-controlled "only the host may edit" mode. Enforced server-side by the Yjs relay. */
+    @Column(name = "is_read_only")
+    @Builder.Default
+    private boolean readOnly = false;
+
     @PrePersist
     protected void onCreate() {
         this.createdAt = Instant.now();

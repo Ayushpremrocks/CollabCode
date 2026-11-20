@@ -71,7 +71,7 @@ public class AgentController {
         } catch (Exception e) {
             log.error("[AgentController] Gemini call failed: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", "AI service is temporarily unavailable. Please try again later."));
         }
     }
 
@@ -108,7 +108,7 @@ public class AgentController {
         } catch (Exception e) {
             log.error("[AgentController] Debug session failed: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "Debug session failed: " + e.getMessage()));
+                    .body(Map.of("error", "The debug session failed unexpectedly. Please try again."));
         }
     }
 }

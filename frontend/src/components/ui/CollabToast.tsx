@@ -52,9 +52,12 @@ class ToastManager {
   }
 }
 
+// The toast API is intentionally exported next to its provider component.
+// eslint-disable-next-line react-refresh/only-export-components
 export const toastManager = new ToastManager();
 
 // Standalone toast helper functions
+// eslint-disable-next-line react-refresh/only-export-components
 export const toast = {
   success: (message: string, title?: string, duration?: number) =>
     toastManager.show('success', message, title, duration),
@@ -76,6 +79,7 @@ interface ToastContextType {
 
 const ToastContext = createContext<ToastContextType | null>(null);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useToast() {
   const ctx = useContext(ToastContext);
   if (!ctx) {
@@ -96,7 +100,7 @@ function ToastCard({
   const shouldReduceMotion = useReducedMotion();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remainingTimeRef = useRef(item.duration ?? 3500);
-  const startTimeRef = useRef<number>(Date.now());
+  const startTimeRef = useRef<number>(0); // set when the timer starts
 
   const startTimer = useCallback(() => {
     if (item.duration === Infinity) return;

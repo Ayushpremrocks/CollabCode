@@ -4,95 +4,114 @@ import com.collabcode.model.User;
 import com.collabcode.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.security.SecureRandom;
+import java.util.Optional;
 
 /**
- * Auto-provisions a local User record the first time a Clerk-authenticated user
- * makes a request (WebSocket connection or REST call).
+ * Auto-provisions a local User the first time a Clerk-authenticated user makes a
+ * request (REST call, STOMP CONNECT or Yjs socket).
  *
- * Clerk does not store users in our database — this service bridges the gap by
- * creating a lightweight local User record keyed on the Clerk user ID (sub claim).
+ * <p>Display name priority: JWT {@code username} claim → email prefix → Clerk id prefix.
+ * Clerk's default session token has neither claim; add them in
+ * Clerk Dashboard → Sessions → Customize session token:
+ * {@code {"username": "{{user.username}}", "email": "{{user.primary_email_address}}"}}.
  *
- * Requirements for Clerk JWT Template (configure in Clerk dashboard):
- *   { "username": "{{user.username}}", "email": "{{user.primary_email_address}}" }
- * Frontend must call: getToken({ template: 'collabcode' })
+ * <p>Race-safe: on first login the browser fires a REST call, a STOMP CONNECT and a
+ * Yjs connect at almost the same time. Creation runs in its own transaction and a
+ * unique-constraint violation is resolved by re-reading the row another request created.
  */
 @Service
 public class UserProvisioningService {
 
     private static final Logger log = LoggerFactory.getLogger(UserProvisioningService.class);
+    private static final int MAX_USERNAME = 50;
+    private static final int MAX_EMAIL = 100;
 
     private final UserRepository userRepository;
+    private final TransactionTemplate newTransaction;
+    private final SecureRandom random = new SecureRandom();
 
-    public UserProvisioningService(UserRepository userRepository) {
+    public UserProvisioningService(UserRepository userRepository, PlatformTransactionManager txManager) {
         this.userRepository = userRepository;
+        this.newTransaction = new TransactionTemplate(txManager);
+        this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    /**
-     * Gets the local User for a Clerk user ID, or creates one if it does not exist.
-     *
-     * @param clerkUserId The Clerk user ID from the JWT {@code sub} claim (e.g. {@code user_2abc...})
-     * @param username    Display name from the JWT {@code username} claim (may be null)
-     * @param email       Email from the JWT {@code email} claim (may be null)
-     * @return The existing or newly created local User
-     */
-    @Transactional
     public User getOrCreateUser(String clerkUserId, String username, String email) {
+        if (clerkUserId == null || clerkUserId.isBlank()) {
+            throw new IllegalArgumentException("Token has no subject");
+        }
+        Optional<User> existing = userRepository.findByClerkUserId(clerkUserId);
+        if (existing.isPresent()) return existing.get();
+
+        for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+                User created = newTransaction.execute(status -> createOrLink(clerkUserId, username, email));
+                if (created != null) return created;
+            } catch (DataIntegrityViolationException e) {
+                // Another request created the user (or took the username) concurrently.
+                Optional<User> raced = userRepository.findByClerkUserId(clerkUserId);
+                if (raced.isPresent()) return raced.get();
+                log.info("Username collision while provisioning {} — retrying", clerkUserId);
+            }
+        }
         return userRepository.findByClerkUserId(clerkUserId)
-                .orElseGet(() -> {
-                    // Try linking via email if a legacy user already exists with this email address
-                    if (email != null && !email.isBlank()) {
-                        java.util.Optional<User> existingUserOpt = userRepository.findByEmail(email);
-                        if (existingUserOpt.isPresent()) {
-                            User existingUser = existingUserOpt.get();
-                            log.info("Linking existing local user ID: {} with Clerk ID: {}", existingUser.getId(), clerkUserId);
-                            existingUser.setClerkUserId(clerkUserId);
-                            // Update display name if it's currently empty or invalid
-                            if (existingUser.getUsername() == null || existingUser.getUsername().isBlank()) {
-                                existingUser.setUsername(resolveDisplayName(username, email, clerkUserId));
-                            }
-                            return userRepository.save(existingUser);
-                        }
-                    }
-
-                    String displayName = resolveDisplayName(username, email, clerkUserId);
-                    
-                    // If the resolved display name already exists, generate a unique variant to avoid constraint violation
-                    if (userRepository.existsByUsername(displayName)) {
-                        displayName = clerkUserId.length() > 12 ? clerkUserId.substring(0, 12) : clerkUserId;
-                        if (userRepository.existsByUsername(displayName)) {
-                            displayName = displayName + "_" + (System.currentTimeMillis() % 1000);
-                        }
-                    }
-
-                    String resolvedEmail = email != null ? email : clerkUserId + "@clerk.local";
-
-                    log.info("Auto-provisioning new local user for Clerk ID: {} (display: {})",
-                            clerkUserId, displayName);
-
-                    User newUser = User.builder()
-                            .clerkUserId(clerkUserId)
-                            .username(displayName)
-                            .email(resolvedEmail)
-                            // passwordHash intentionally null — Clerk owns the credentials
-                            .build();
-
-                    return userRepository.save(newUser);
-                });
+                .orElseThrow(() -> new IllegalStateException("Could not provision user"));
     }
 
-    /**
-     * Derives a display name in priority order: username claim → email prefix → Clerk ID prefix.
-     */
-    private String resolveDisplayName(String username, String email, String clerkUserId) {
-        if (username != null && !username.isBlank()) {
-            return username;
-        }
+    private User createOrLink(String clerkUserId, String username, String email) {
+        Optional<User> again = userRepository.findByClerkUserId(clerkUserId);
+        if (again.isPresent()) return again.get();
+
+        // Link a legacy (pre-Clerk) account with the same verified email address.
         if (email != null && !email.isBlank()) {
-            return email.split("@")[0]; // e.g. "alice" from "alice@example.com"
+            Optional<User> legacy = userRepository.findByEmail(email);
+            if (legacy.isPresent() && legacy.get().getClerkUserId() == null) {
+                User user = legacy.get();
+                user.setClerkUserId(clerkUserId);
+                log.info("Linked legacy user {} to Clerk id {}", user.getId(), clerkUserId);
+                return userRepository.save(user);
+            }
         }
-        // Last resort: first 12 chars of Clerk ID (e.g. "user_2abc123")
+
+        String displayName = uniqueUsername(resolveDisplayName(username, email, clerkUserId));
+        String resolvedEmail = email != null && !email.isBlank() && !userRepository.existsByEmail(email)
+                ? truncate(email, MAX_EMAIL)
+                : truncate(clerkUserId + "@clerk.local", MAX_EMAIL);
+
+        log.info("Provisioning local user for Clerk id {} (display: {})", clerkUserId, displayName);
+        return userRepository.saveAndFlush(User.builder()
+                .clerkUserId(clerkUserId)
+                .username(displayName)
+                .email(resolvedEmail)
+                .build());
+    }
+
+    private String uniqueUsername(String base) {
+        String candidate = truncate(base, MAX_USERNAME);
+        while (userRepository.existsByUsername(candidate)) {
+            String suffix = "_" + Integer.toString(random.nextInt(36 * 36 * 36 * 36), 36);
+            candidate = truncate(base, MAX_USERNAME - suffix.length()) + suffix;
+        }
+        return candidate;
+    }
+
+    static String resolveDisplayName(String username, String email, String clerkUserId) {
+        if (username != null && !username.isBlank()) return username.strip();
+        if (email != null && email.contains("@")) {
+            String prefix = email.substring(0, email.indexOf('@')).strip();
+            if (!prefix.isEmpty()) return prefix;
+        }
         return clerkUserId.length() > 12 ? clerkUserId.substring(0, 12) : clerkUserId;
+    }
+
+    private static String truncate(String s, int max) {
+        return s.length() > max ? s.substring(0, max) : s;
     }
 }

@@ -36,12 +36,16 @@ CollabCode ensures multiple users can edit the same document simultaneously with
 4. **Server Relay**: The Spring Boot backend (`YjsWebSocketHandler`) receives the binary message. It does *not* parse or apply the CRDT logic. Instead, it acts as a dumb relay, broadcasting the exact binary payload to all other connected sessions in that room.
 5. **Remote Application**: User B's browser receives the binary message. Yjs merges the remote update into User B's local `Y.Doc`. The CRDT algorithm mathematically guarantees that both users will end up with the exact same document state, regardless of the order updates arrive.
 
-### Snapshot Persistence
-To persist documents, the frontend periodically (e.g., every 30 seconds) serializes the entire `Y.Doc` state into a binary blob and sends it to the server. The backend saves this in the `document_snapshots` table as a `BYTEA` column. When a new user joins an empty room, the server sends the latest snapshot to initialize their editor.
+### Server Log, Replay and Persistence
+The server does not merge CRDT updates (there is no maintained Java Yjs), but it is no longer a pure "dumb relay". Each room (`YjsRoom`) keeps a **base state** plus an **in-memory log** of every update received since:
 
-**Trade-off (Server as Relay vs. Server as Client)**: We chose to make the server a "dumb relay" for Yjs updates rather than a full Yjs client (like y-websocket on Node.js).
-- *Pros*: Saves CPU on the Java backend; simplifies backend architecture (no complex Java CRDT libraries needed).
-- *Cons*: The server relies on clients to periodically push full snapshots for persistence, meaning the very last few seconds of edits might be lost if all clients disconnect abruptly.
+1. **Join:** a connecting client receives the base (frame type 3, possibly empty) followed by every logged update. It therefore always holds the complete document. Previously a joiner only received the last database snapshot (up to 30 s old); updates that depended on the missing edits stayed "pending" inside Yjs forever, which made text appear on the wrong line for some users.
+2. **Compaction:** every ~20 s a client whose document changed sends its full state together with an *ack*, the number of base/update frames it had applied. The server recorded which log sequence number each frame carried, so it knows exactly which prefix of the log that state contains. It replaces the base and drops only those entries. A client's own updates are always in its own state, so a solo editor's log compacts too.
+3. **Reconnect:** a client pushes its full state on every (re)connect, so offline edits, and edits lost to a backend restart, are recovered.
+4. **Persistence:** a changed base is written to `document_snapshots` at most once a minute, when the last user leaves, and on shutdown, instead of every client writing every 30 s.
+5. **Host-only mode** is enforced here: updates and snapshots from non-hosts are rejected while it is on. When it is lifted, clients re-push their full state so a rejected keystroke cannot leave a gap in their update history.
+
+**Trade-off:** state lives in memory, so the backend must run as a single instance. If the server dies with un-compacted log entries and every client is gone, the edits since the last persisted snapshot are lost, at most about a minute of work.
 
 ---
 

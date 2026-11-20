@@ -71,7 +71,7 @@ export function Navbar() {
               {user && (
                 <>
                   <span className="text-sm hidden sm:block font-code" style={{ color: 'var(--cc-text-muted)' }}>
-                    {user.username}
+                    {user.displayName}
                   </span>
                   <button
                     type="button"

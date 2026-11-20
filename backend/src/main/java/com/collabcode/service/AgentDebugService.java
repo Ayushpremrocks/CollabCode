@@ -84,10 +84,31 @@ public class AgentDebugService {
 
         log.info("[AgentDebug] Starting session — language={}, codeLen={}", language, originalCode.length());
 
+        // The loop verifies fixes by running them; without a runtime it would just
+        // burn three Gemini calls and could never report success.
+        if (!CodeExecutionService.isExecutable(language)) {
+            return buildResponse(originalCode, null, null, null, null, 0, false,
+                    "The debug agent needs to run your code, and " + language + " cannot be executed here.");
+        }
+
         // ── Step 1: Run original code to get actual error output ─────────────
         ExecuteCodeResponse initialResult = runCode(originalCode, language);
         log.info("[AgentDebug] Initial run status: {} (id={})",
                 initialResult.getStatus(), initialResult.getStatusId());
+
+        // Code that already runs cleanly has nothing to fix unless the user said what is wrong.
+        boolean noHint = userHint == null || userHint.isBlank();
+        if (noHint && Integer.valueOf(CodeExecutionService.STATUS_ACCEPTED).equals(initialResult.getStatusId())) {
+            return buildResponse(originalCode, null,
+                    "The code compiled and ran without errors, so there is nothing to fix. "
+                            + "If the output is wrong, describe the expected behaviour in the hint box and run the agent again.",
+                    initialResult, null, 0, false, null);
+        }
+        // Execution infrastructure failure (network, Wandbox down): don't ask Gemini to "fix" that.
+        if (Integer.valueOf(CodeExecutionService.STATUS_NOT_RUN).equals(initialResult.getStatusId())) {
+            return buildResponse(originalCode, null, null, initialResult, null, 0, false,
+                    "Could not run the code: " + initialResult.getStderr());
+        }
 
         // Seed the error context for the first Gemini call
         String currentCode  = originalCode;

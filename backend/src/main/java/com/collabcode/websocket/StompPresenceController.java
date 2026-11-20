@@ -3,7 +3,7 @@ package com.collabcode.websocket;
 import com.collabcode.dto.ChatMessageDTO;
 import com.collabcode.dto.RoomStateDTO;
 import com.collabcode.dto.UserJoinedEventDTO;
-import com.collabcode.dto.UserPresenceDTO;
+import com.collabcode.service.ChatHistoryService;
 import com.collabcode.service.DocumentService;
 import com.collabcode.service.PresenceService;
 import com.collabcode.service.RoomService;
@@ -17,157 +17,99 @@ import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 
+/**
+ * STOMP handlers for room events. Membership is already enforced by
+ * {@link StompAuthChannelInterceptor} before any of these methods run.
+ */
 @Controller
 public class StompPresenceController {
 
     private static final Logger log = LoggerFactory.getLogger(StompPresenceController.class);
+    static final int MAX_CHAT_LENGTH = 1000;
+    private static final int MAX_NAME_LENGTH = 80;
 
     private final PresenceService presenceService;
     private final DocumentService documentService;
     private final RoomService roomService;
+    private final ChatHistoryService chatHistoryService;
     private final SimpMessagingTemplate messagingTemplate;
 
     public StompPresenceController(PresenceService presenceService,
-                                    DocumentService documentService,
-                                    RoomService roomService,
-                                    SimpMessagingTemplate messagingTemplate) {
+                                   DocumentService documentService,
+                                   RoomService roomService,
+                                   ChatHistoryService chatHistoryService,
+                                   SimpMessagingTemplate messagingTemplate) {
         this.presenceService = presenceService;
         this.documentService = documentService;
         this.roomService = roomService;
+        this.chatHistoryService = chatHistoryService;
         this.messagingTemplate = messagingTemplate;
     }
 
     @MessageMapping("/room/{roomCode}/join")
     public void handleJoin(@DestinationVariable String roomCode, Principal principal) {
-        if (principal == null) return;
+        StompPrincipal user = StompAuthChannelInterceptor.principalOf(principal);
+        if (user == null) return;
 
-        String username = principal.getName();
         String language = documentService.getLanguage(roomCode);
-        log.info("STOMP user-joined: user='{}' room='{}' language='{}'", username, roomCode, language);
-
-        RoomStateDTO roomState = RoomStateDTO.builder()
-                .roomCode(roomCode)
-                .language(language)
-                .build();
-        messagingTemplate.convertAndSend(
-                "/topic/room/" + roomCode + "/room-state", roomState);
-        log.info("STOMP room-state sent on join: room='{}' language='{}'", roomCode, language);
-
-        UserJoinedEventDTO userJoined = UserJoinedEventDTO.builder()
-                .username(username)
-                .language(language)
-                .build();
-        messagingTemplate.convertAndSend(
-                "/topic/room/" + roomCode + "/user-joined", userJoined);
-    }
-
-    @MessageMapping("/room/{roomCode}/leave")
-    public void handleLeave(@DestinationVariable String roomCode, Principal principal) {
-        if (principal == null) return;
-
-        String username = principal.getName();
-        log.info("STOMP: User '{}' left room '{}'", username, roomCode);
+        messagingTemplate.convertAndSend("/topic/room/" + roomCode + "/room-state",
+                RoomStateDTO.builder().roomCode(roomCode).language(language).build());
+        messagingTemplate.convertAndSend("/topic/room/" + roomCode + "/user-joined",
+                UserJoinedEventDTO.builder().username(user.username()).language(language).build());
+        // Re-broadcast presence: the subscriber may have missed the broadcast that
+        // happened when its Yjs socket connected (the two sockets race).
+        presenceService.broadcastPresence(roomCode);
     }
 
     @MessageMapping("/room/{roomCode}/language")
-    public void handleLanguageChange(
-            @DestinationVariable String roomCode,
-            @Payload Map<String, String> payload,
-            Principal principal) {
-        if (principal == null) return;
-
+    public void handleLanguageChange(@DestinationVariable String roomCode,
+                                     @Payload Map<String, String> payload,
+                                     Principal principal) {
+        StompPrincipal user = StompAuthChannelInterceptor.principalOf(principal);
         String language = payload.get("language");
-        if (language == null) {
-            log.warn("STOMP language-change ignored: missing language in room '{}'", roomCode);
+        if (user == null || !documentService.isSupportedLanguage(language)) return;
+
+        RoomService.RoomAccess access = roomService.getAccess(roomCode, user.userId());
+        if (access.readOnly() && !access.owner()) {
+            log.info("[STOMP] Language change by '{}' ignored: room {} is read-only", user.username(), roomCode);
             return;
         }
-
-        if (!documentService.isSupportedLanguage(language)) {
-            log.warn("STOMP language-change ignored: unsupported language '{}' in room '{}'",
-                    language, roomCode);
-            return;
-        }
-
-        String username = principal.getName();
-        log.info("STOMP language-change: user='{}' language='{}' room='{}'", username, language, roomCode);
 
         documentService.updateLanguage(roomCode, language);
-        log.info("Language stored in room '{}': '{}'", roomCode, language);
-
-        messagingTemplate.convertAndSend(
-                "/topic/room/" + roomCode + "/language",
-                Map.of("language", language, "changedBy", username));
-
-        RoomStateDTO roomState = RoomStateDTO.builder()
-                .roomCode(roomCode)
-                .language(language)
-                .build();
-        messagingTemplate.convertAndSend(
-                "/topic/room/" + roomCode + "/room-state", roomState);
+        messagingTemplate.convertAndSend("/topic/room/" + roomCode + "/language",
+                Map.of("language", language, "changedBy", user.username()));
+        messagingTemplate.convertAndSend("/topic/room/" + roomCode + "/room-state",
+                RoomStateDTO.builder().roomCode(roomCode).language(language).build());
     }
 
-    /**
-     * Feature 6: Read-only mode toggle (host only)
-     */
-    @MessageMapping("/room/{roomCode}/readonly")
-    public void handleReadOnlyToggle(
-            @DestinationVariable String roomCode,
-            @Payload Map<String, Object> payload,
-            Principal principal) {
-        if (principal == null) return;
-
-        String username = principal.getName();
-
-        if (!roomService.isOwner(roomCode, username)) {
-            log.warn("STOMP readonly-toggle: non-owner '{}' attempted to toggle in room '{}'", username, roomCode);
-            return;
-        }
-
-        boolean readOnly = Boolean.TRUE.equals(payload.get("readOnly"));
-        log.info("STOMP readonly-toggle: room='{}' readOnly={} by='{}'", roomCode, readOnly, username);
-
-        messagingTemplate.convertAndSend(
-                "/topic/room/" + roomCode + "/readonly",
-                Map.of("readOnly", readOnly, "toggledBy", username));
-    }
-
-    /**
-     * Feature 7: Chat messages
-     */
     @MessageMapping("/room/{roomCode}/chat")
-    public void handleChat(
-            @DestinationVariable String roomCode,
-            @Payload Map<String, String> payload,
-            Principal principal) {
-        if (principal == null) return;
+    public void handleChat(@DestinationVariable String roomCode,
+                           @Payload Map<String, String> payload,
+                           Principal principal) {
+        StompPrincipal user = StompAuthChannelInterceptor.principalOf(principal);
+        if (user == null) return;
 
-        String username = principal.getName();
         String message = payload.get("message");
-        String name = payload.get("name");
-        String imageUrl = payload.get("imageUrl");
-
         if (message == null || message.isBlank()) return;
+        message = message.strip();
+        if (message.length() > MAX_CHAT_LENGTH) message = message.substring(0, MAX_CHAT_LENGTH);
 
-        // Trim to reasonable length
-        if (message.length() > 1000) {
-            message = message.substring(0, 1000);
-        }
-
-        log.debug("STOMP chat: user='{}' room='{}' msg='{}'", username, roomCode,
-                message.substring(0, Math.min(50, message.length())));
+        String name = payload.get("name");
+        if (name != null && name.length() > MAX_NAME_LENGTH) name = name.substring(0, MAX_NAME_LENGTH);
+        String imageUrl = payload.get("imageUrl");
+        if (imageUrl != null && !imageUrl.startsWith("https://")) imageUrl = null;
 
         ChatMessageDTO chatMsg = ChatMessageDTO.builder()
-                .username(username)
+                .username(user.username())
                 .name(name)
                 .imageUrl(imageUrl)
                 .message(message)
                 .timestamp(Instant.now().toString())
                 .build();
 
-        messagingTemplate.convertAndSend(
-                "/topic/room/" + roomCode + "/chat", chatMsg);
+        chatHistoryService.add(roomCode, chatMsg);
+        messagingTemplate.convertAndSend("/topic/room/" + roomCode + "/chat", chatMsg);
     }
 }

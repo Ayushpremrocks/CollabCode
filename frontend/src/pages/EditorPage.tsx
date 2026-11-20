@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { CollaborativeEditor } from '../components/CollaborativeEditor';
 import { ActiveUsersPanel } from '../components/ActiveUsersPanel';
@@ -14,243 +14,244 @@ import { useCollaboration } from '../hooks/useCollaboration';
 import { usePresence } from '../hooks/usePresence';
 import { useAuth } from '../contexts/AuthContext';
 import { useWebSocket } from '../contexts/WebSocketContext';
-import { useTheme } from '../contexts/ThemeContext';
 import { roomService } from '../services/roomService';
 import { executionService } from '../services/executionService';
+import { apiErrorMessage } from '../services/api';
 import { downloadCode } from '../utils/downloadFile';
-import { useUser } from '@clerk/clerk-react';
-
+import { replaceSharedText, stripCarriageReturns } from '../collab/textEdits';
+import type { CollabIdentity } from '../collab/collabSession';
 import {
+  getUserColor,
   isSupportedLanguage,
   type ChatMessage,
   type ExecuteCodeResponse,
-  type LanguageChangeEvent,
   type Room,
-  type RoomState,
+  type RoomDeletedEvent,
   type SupportedLanguage,
-  type UserJoinedEvent,
 } from '../types';
 
-function applyRoomLanguage(
-  nextLanguage: string,
-  source: string,
-  setLanguage: (language: SupportedLanguage) => void
-) {
-  if (!isSupportedLanguage(nextLanguage)) {
-    console.warn(`[Language] Ignored invalid language from ${source}:`, nextLanguage);
-    return;
+const FONT_SIZE_KEY = 'collabcode-font-size';
+const AUTHOR_NAMES_KEY = 'collabcode-show-authors';
+const EXPIRY_WARNING_MS = 3600 * 1000;
+
+function readStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
   }
-  setLanguage(nextLanguage);
 }
 
-const FONT_SIZE_KEY = 'collabcode-font-size';
+function writeStorage(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* private mode etc. */
+  }
+}
+
+function parseJson<T>(body: string): T | null {
+  try {
+    return JSON.parse(body) as T;
+  } catch (e) {
+    console.warn('[STOMP] Ignoring malformed message', e);
+    return null;
+  }
+}
 
 export function EditorPage() {
-  const { roomCode } = useParams<{ roomCode: string }>();
+  const { roomCode: rawRoomCode } = useParams<{ roomCode: string }>();
+  const roomCode = (rawRoomCode ?? '').toUpperCase();
   const navigate = useNavigate();
-  const location = useLocation();
   const { user } = useAuth();
-  const clerkContext = useUser();
   const { stompClient, connected: stompConnected, publish } = useWebSocket();
-  const { isDark } = useTheme();
 
   const [room, setRoom] = useState<Room | null>(null);
-  const [language, setLanguage] = useState<SupportedLanguage | null>(null);
-  const [loadingRoom, setLoadingRoom] = useState(true);
   const [error, setError] = useState('');
-
-  // Feature 6: Read-only mode
+  const [language, setLanguage] = useState<SupportedLanguage>('javascript');
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [isRoomLocked, setIsRoomLocked] = useState(false);
+  const [expiringSoon, setExpiringSoon] = useState(false);
 
-  // Feature 5: Code execution
   const [showOutput, setShowOutput] = useState(false);
   const [execResult, setExecResult] = useState<ExecuteCodeResponse | null>(null);
   const [isRunning, setIsRunning] = useState(false);
-
-  // Phase 5/6: Standard input — LOCAL per user, intentionally NOT shared via Yjs.
-  // Rationale: stdin is per-execution. Syncing it would create race conditions
-  // when multiple users run code simultaneously with different inputs.
+  // stdin is per user on purpose: each person runs the program with their own input.
   const [stdin, setStdin] = useState('');
 
-  // Feature 7: Chat
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatCollapsed, setChatCollapsed] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
-
-  // Feature 8: History
-  const [showHistory, setShowHistory] = useState(false);
-
-  // AI Agent panel
-  const [agentCollapsed, setAgentCollapsed] = useState(true);
-
-  // AI Debug Agent panel
-  const [debugCollapsed, setDebugCollapsed] = useState(false);
-
-  // Feature 13: Font size
-  const [fontSize, setFontSize] = useState<number>(() => {
-    const saved = localStorage.getItem(FONT_SIZE_KEY);
-    return saved ? parseInt(saved, 10) : 14;
-  });
-
-  // Feature 2: Room deleted notification
-  const [deletedMessage, setDeletedMessage] = useState('');
-
-  const { yText, connected: yjsConnected } = useCollaboration(roomCode || '');
-  const { activeUsers } = usePresence(roomCode || '');
-
-  // Compare Clerk user IDs for reliable host detection.
-  // username-based comparison is fragile because the frontend derives it from
-  // emailAddress.split('@')[0], while the backend may store a different value
-  // from the JWT username claim. Clerk IDs are always canonical.
-  const isHost = !!(room?.ownerClerkId && clerkContext.user?.id && room.ownerClerkId === clerkContext.user.id);
-
-  // Check for query param message (e.g. ?deleted=true from redirect)
+  const chatCollapsedRef = useRef(chatCollapsed);
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    if (params.get('msg') === 'deleted') {
-      setDeletedMessage('Room was deleted by the host.');
-    }
-  }, [location.search]);
+    chatCollapsedRef.current = chatCollapsed;
+  }, [chatCollapsed]);
 
-  // Load room details
+  const [showHistory, setShowHistory] = useState(false);
+  const [agentCollapsed, setAgentCollapsed] = useState(true);
+  const [debugCollapsed, setDebugCollapsed] = useState(false);
+  const [fontSize, setFontSize] = useState<number>(() => Number.parseInt(readStorage(FONT_SIZE_KEY) ?? '', 10) || 14);
+  const [showAuthorNames, setShowAuthorNames] = useState(() => readStorage(AUTHOR_NAMES_KEY) === 'true');
+
+  const joined = room !== null;
+  const isHost = !!(room?.ownerClerkId && user?.clerkUserId && room.ownerClerkId === user.clerkUserId);
+  const canEdit = !isReadOnly || isHost;
+
+  // Wait for the backend username so colours/authorship match what others see.
+  const identity = useMemo<CollabIdentity | null>(() => {
+    if (!user || user.userId === 0) return null;
+    return {
+      username: user.username,
+      name: user.displayName,
+      color: getUserColor(user.username),
+      imageUrl: user.imageUrl,
+    };
+  }, [user]);
+
+  const { session, yText, authors, awareness, status, synced } = useCollaboration(roomCode, joined, identity);
+  const { activeUsers } = usePresence(roomCode, joined);
+  const getCode = useCallback(() => yText.toString(), [yText]);
+
+  // ── Join (REST) — must succeed before the sockets accept us ──────────────
   useEffect(() => {
     if (!roomCode) return;
-    const loadRoom = async () => {
-      try {
-        const roomData = await roomService.joinRoom({ roomCode });
-        setRoom(roomData);
-        setIsRoomLocked(roomData.locked || false);
-        applyRoomLanguage(roomData.language, 'room join (REST)', setLanguage);
-      } catch (err: unknown) {
-        const error = err as { response?: { data?: { error?: string } } };
-        setError(error.response?.data?.error || 'Failed to load room');
-      } finally {
-        setLoadingRoom(false);
-      }
+    let cancelled = false;
+    roomService.joinRoom({ roomCode })
+      .then((data) => {
+        if (cancelled) return;
+        setRoom(data);
+        setIsRoomLocked(data.locked);
+        setIsReadOnly(data.readOnly);
+        if (isSupportedLanguage(data.language)) setLanguage(data.language);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(apiErrorMessage(err, 'Failed to load room'));
+      });
+    return () => {
+      cancelled = true;
     };
-    loadRoom();
   }, [roomCode]);
 
-  // Expiry warning check
-  const expiryWarning = room?.expiresAt
-    ? new Date(room.expiresAt).getTime() - Date.now() < 3600 * 1000
-    : false;
-
-  // Subscribe to STOMP events
+  // Recent chat (kept by the server in memory) so a refresh doesn't wipe the conversation.
   useEffect(() => {
-    if (!stompClient || !stompConnected || !roomCode) return;
+    if (!joined) return;
+    let cancelled = false;
+    roomService.getChatHistory(roomCode)
+      .then((history) => {
+        if (!cancelled) setChatMessages((live) => [...history, ...live.filter((m) => !history.some((h) => h.timestamp === m.timestamp && h.username === m.username))]);
+      })
+      .catch(() => { /* chat history is best effort */ });
+    return () => {
+      cancelled = true;
+    };
+  }, [joined, roomCode]);
+
+  // ── Expiry warning (re-evaluated every minute) ───────────────────────────
+  const expiresAt = room?.expiresAt;
+  useEffect(() => {
+    if (!expiresAt) return;
+    const check = () => setExpiringSoon(new Date(expiresAt).getTime() - Date.now() < EXPIRY_WARNING_MS);
+    const first = setTimeout(check, 0);
+    const timer = setInterval(check, 60_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, [expiresAt]);
+
+  // ── Collaboration status / permissions ───────────────────────────────────
+  useEffect(() => {
+    session.setCanEdit(canEdit);
+  }, [session, canEdit]);
+
+  useEffect(() => {
+    if (status === 'not-found') navigate('/dashboard?msg=deleted', { replace: true });
+  }, [status, navigate]);
+
+  // Text written by older versions may contain CRLF, which breaks offset mapping.
+  useEffect(() => {
+    if (synced && canEdit) stripCarriageReturns(yText);
+  }, [synced, canEdit, yText]);
+
+  // ── STOMP room events ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!stompClient || !stompConnected || !joined) return;
+    const topic = (name: string) => `/topic/room/${roomCode}/${name}`;
+    const onLanguage = (body: string) => {
+      const data = parseJson<{ language?: string }>(body);
+      if (data?.language && isSupportedLanguage(data.language)) setLanguage(data.language);
+    };
 
     const subs = [
-      stompClient.subscribe(`/topic/room/${roomCode}/room-state`, (msg) => {
-        try {
-          const data: RoomState = JSON.parse(msg.body);
-          if (data.language) applyRoomLanguage(data.language, 'room-state', setLanguage);
-        } catch {}
+      stompClient.subscribe(topic('room-state'), (m) => onLanguage(m.body)),
+      stompClient.subscribe(topic('language'), (m) => onLanguage(m.body)),
+      stompClient.subscribe(topic('readonly'), (m) => {
+        const data = parseJson<{ readOnly?: boolean }>(m.body);
+        if (data) setIsReadOnly(!!data.readOnly);
       }),
-      stompClient.subscribe(`/topic/room/${roomCode}/language`, (msg) => {
-        try {
-          const data: LanguageChangeEvent = JSON.parse(msg.body);
-          if (data.language) applyRoomLanguage(data.language, 'language-change', setLanguage);
-        } catch {}
+      stompClient.subscribe(topic('lock'), (m) => {
+        const data = parseJson<{ locked?: boolean }>(m.body);
+        if (data) setIsRoomLocked(!!data.locked);
       }),
-      stompClient.subscribe(`/topic/room/${roomCode}/user-joined`, (msg) => {
-        try {
-          const data: UserJoinedEvent = JSON.parse(msg.body);
-          if (data.language) applyRoomLanguage(data.language, 'user-joined', setLanguage);
-        } catch {}
+      stompClient.subscribe(topic('chat'), (m) => {
+        const data = parseJson<ChatMessage>(m.body);
+        if (!data) return;
+        setChatMessages((prev) => [...prev, data]);
+        if (chatCollapsedRef.current) setUnreadCount((c) => c + 1);
       }),
-      // Feature 6: Read-only toggle
-      stompClient.subscribe(`/topic/room/${roomCode}/readonly`, (msg) => {
-        try {
-          const data = JSON.parse(msg.body);
-          setIsReadOnly(!!data.readOnly);
-        } catch {}
-      }),
-      // Room lock toggle
-      stompClient.subscribe(`/topic/room/${roomCode}/lock`, (msg) => {
-        try {
-          const data = JSON.parse(msg.body);
-          setIsRoomLocked(!!data.locked);
-        } catch {}
-      }),
-      // Feature 7: Chat messages
-      stompClient.subscribe(`/topic/room/${roomCode}/chat`, (msg) => {
-        try {
-          const data: ChatMessage = JSON.parse(msg.body);
-          setChatMessages(prev => [...prev, data]);
-          // Track unread if chat is collapsed
-          setChatCollapsed(prev => {
-            if (prev) setUnreadCount(c => c + 1);
-            return prev;
-          });
-        } catch {}
-      }),
-      // Feature 2: Room deleted
-      stompClient.subscribe(`/topic/room/${roomCode}/room-deleted`, () => {
-        navigate('/dashboard?msg=deleted');
+      stompClient.subscribe(topic('room-deleted'), (m) => {
+        const data = parseJson<RoomDeletedEvent>(m.body);
+        navigate(`/dashboard?msg=${data?.reason === 'expired' ? 'expired' : 'deleted'}`, { replace: true });
       }),
     ];
+    return () => subs.forEach((s) => s.unsubscribe());
+  }, [stompClient, stompConnected, joined, roomCode, navigate]);
 
-    return () => subs.forEach(s => s.unsubscribe());
-  }, [stompClient, stompConnected, roomCode, navigate]);
-
-  const handleLanguageChange = useCallback((newLanguage: SupportedLanguage) => {
-    setLanguage(newLanguage);
-    publish(`/app/room/${roomCode}/language`, { language: newLanguage });
+  // ── Actions ──────────────────────────────────────────────────────────────
+  const handleLanguageChange = useCallback((next: SupportedLanguage) => {
+    setLanguage(next);
+    publish(`/app/room/${roomCode}/language`, { language: next });
   }, [roomCode, publish]);
 
-  const handleLeaveRoom = useCallback(() => {
-    navigate('/dashboard');
-  }, [navigate]);
-
-  // Feature 6: Toggle read-only
-  const handleToggleReadOnly = useCallback(() => {
-    const newReadOnly = !isReadOnly;
-    setIsReadOnly(newReadOnly);
-    publish(`/app/room/${roomCode}/readonly`, { readOnly: newReadOnly });
-  }, [isReadOnly, roomCode, publish]);
-
-  // Room lock
-  const handleToggleRoomLock = useCallback(async () => {
-    if (!roomCode) return;
+  const handleToggleReadOnly = useCallback(async () => {
     try {
-      const result = await roomService.toggleLock(roomCode, !isRoomLocked);
+      const result = await roomService.setReadOnly(roomCode, !isReadOnly);
+      setIsReadOnly(result.readOnly);
+      toast.info(result.readOnly ? 'Host-only editing: collaborators can now only watch' : 'Everyone can edit again');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to change editing mode'));
+    }
+  }, [roomCode, isReadOnly]);
+
+  const handleToggleRoomLock = useCallback(async () => {
+    try {
+      const result = await roomService.setLocked(roomCode, !isRoomLocked);
       setIsRoomLocked(result.locked);
-      toast.info(result.locked ? 'Room locked — editing restricted to host' : 'Room unlocked');
-    } catch (e: unknown) {
-      const err = e as { response?: { data?: { error?: string }; status?: number } };
-      const msg = err.response?.data?.error || 'Failed to toggle room lock';
-      console.error('Failed to toggle lock:', msg);
-      toast.error(msg);
+      toast.info(result.locked ? 'Room locked — new users cannot join' : 'Room unlocked');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to toggle room lock'));
     }
   }, [roomCode, isRoomLocked]);
 
-  // Delete Room
   const handleDeleteRoom = useCallback(async () => {
-    if (!roomCode) return;
     try {
       await roomService.deleteRoom(roomCode);
-      navigate('/dashboard?msg=deleted');
-    } catch (e) {
-      console.error('Failed to delete room', e);
+      navigate('/dashboard?msg=you-deleted', { replace: true });
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to delete room'));
     }
   }, [roomCode, navigate]);
 
-  // Feature 5: Run code — passes stdin (Phase 5: local per user)
   const handleRunCode = useCallback(async () => {
-    if (!language) return;
-    const code = yText.toString();
     setIsRunning(true);
     setShowOutput(true);
     setExecResult(null);
     try {
-      const result = await executionService.executeCode({ code, language, stdin: stdin || '' });
-      setExecResult(result);
-    } catch (e) {
+      setExecResult(await executionService.executeCode({ code: getCode(), language, stdin }));
+    } catch (err) {
       setExecResult({
         stdout: null,
-        stderr: 'Failed to connect to execution service.',
+        stderr: apiErrorMessage(err, 'Failed to connect to the execution service.'),
         compileOutput: null,
         status: 'Error',
         statusId: 0,
@@ -260,44 +261,66 @@ export function EditorPage() {
     } finally {
       setIsRunning(false);
     }
-  }, [language, yText, stdin]);
+  }, [getCode, language, stdin]);
 
-  // Feature 10: Download
   const handleDownload = useCallback(() => {
-    if (!language || !roomCode) return;
-    downloadCode(yText.toString(), language, roomCode);
+    downloadCode(getCode(), language, roomCode);
     toast.success('Code file downloaded');
-  }, [language, roomCode, yText]);
+  }, [getCode, language, roomCode]);
 
-  // Feature 7: Send chat
   const handleSendChat = useCallback((message: string) => {
-    const clerkUser = clerkContext?.user;
-    publish(`/app/room/${roomCode}/chat`, { 
+    publish(`/app/room/${roomCode}/chat`, {
       message,
-      name: clerkUser?.fullName || clerkUser?.firstName || clerkUser?.username || '',
-      imageUrl: clerkUser?.imageUrl || ''
+      name: user?.displayName ?? '',
+      imageUrl: user?.imageUrl ?? '',
     });
-  }, [roomCode, publish, clerkContext?.user]);
+  }, [roomCode, publish, user]);
 
-  // Feature 7: Open chat (reset unread)
   const handleChatToggle = useCallback(() => {
-    setChatCollapsed(prev => {
-      if (prev) setUnreadCount(0); // opening
+    if (chatCollapsed) setUnreadCount(0);
+    setChatCollapsed(!chatCollapsed);
+  }, [chatCollapsed]);
+
+  const handleFontSizeChange = useCallback((size: number) => {
+    setFontSize(size);
+    writeStorage(FONT_SIZE_KEY, String(size));
+  }, []);
+
+  const handleToggleAuthorNames = useCallback(() => {
+    setShowAuthorNames((prev) => {
+      writeStorage(AUTHOR_NAMES_KEY, String(!prev));
       return !prev;
     });
   }, []);
 
-  // Feature 13: Font size
-  const handleFontSizeChange = useCallback((size: number) => {
-    setFontSize(size);
-    localStorage.setItem(FONT_SIZE_KEY, String(size));
-  }, []);
+  /** Restores a snapshot as a normal collaborative edit, so every participant sees it immediately. */
+  const handleRestore = useCallback((code: string, snapshotLanguage: string) => {
+    replaceSharedText(yText, code, 'restore');
+    if (isSupportedLanguage(snapshotLanguage) && snapshotLanguage !== language) {
+      handleLanguageChange(snapshotLanguage);
+    }
+  }, [yText, language, handleLanguageChange]);
 
-  const activeLanguage = language ?? 'javascript';
-
-  if ((loadingRoom || language === null) && !error) {
+  // ── Render ───────────────────────────────────────────────────────────────
+  if (error) {
     return (
-      <div className={`min-h-screen ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`}>
+      <div className="min-h-screen bg-gray-950">
+        <Navbar />
+        <div className="flex items-center justify-center h-[calc(100vh-56px)]">
+          <div className="text-center">
+            <p className="text-red-400 mb-4">{error}</p>
+            <button type="button" onClick={() => navigate('/dashboard')} className="text-indigo-400 hover:text-indigo-300 text-sm transition-colors">
+              ← Back to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!room) {
+    return (
+      <div className="min-h-screen bg-gray-950">
         <Navbar />
         <div className="flex items-center justify-center h-[calc(100vh-56px)]">
           <div className="flex flex-col items-center gap-4">
@@ -309,172 +332,75 @@ export function EditorPage() {
     );
   }
 
-  if (error) {
-    return (
-      <div className={`min-h-screen ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`}>
-        <Navbar />
-        <div className="flex items-center justify-center h-[calc(100vh-56px)]">
-          <div className="text-center">
-            <p className="text-red-400 mb-4">{error}</p>
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="text-indigo-400 hover:text-indigo-300 text-sm transition-colors"
-            >
-              ← Back to Dashboard
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const banner = (tone: 'amber' | 'red', text: string) => (
+    <div className={`${tone === 'amber' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-red-500/10 border-red-500/20 text-red-400'} border-b px-4 py-1.5 text-xs font-medium shrink-0`}>
+      {text}
+    </div>
+  );
 
   return (
-    <div className={`h-screen flex flex-col overflow-hidden ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`}>
+    <div className="h-screen flex flex-col overflow-hidden bg-gray-950">
       <Navbar />
 
-      {/* Feature 9: Expiry warning */}
-      {expiryWarning && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 flex items-center gap-2 shrink-0">
-          <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <span className="text-amber-400 text-xs font-medium">
-            ⚠️ This room expires in less than 1 hour. Save your work!
-          </span>
-        </div>
-      )}
+      {expiringSoon && banner('amber', '⚠️ This room expires in less than 1 hour. Download your code to keep it.')}
+      {isReadOnly && (isHost
+        ? banner('amber', '🔒 Host-only editing is on — collaborators can watch but not edit.')
+        : banner('amber', '🔒 The host has enabled host-only editing — you can watch but not edit.'))}
+      {isRoomLocked && banner('amber', '🔐 This room is locked — new users cannot join.')}
+      {status === 'forbidden' && banner('red', 'You no longer have access to this room.')}
+      {status === 'unauthorized' && banner('red', 'Your session could not be verified. Please sign out and sign in again.')}
 
-      {/* Feature 6: Read-only banner */}
-      {isReadOnly && !isHost && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 flex items-center gap-2 shrink-0">
-          <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-          </svg>
-          <span className="text-amber-400 text-xs font-medium">
-            🔒 Room is in read-only mode — only the host can edit
-          </span>
-        </div>
-      )}
-
-      {/* Room locked banner */}
-      {isRoomLocked && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 flex items-center gap-2 shrink-0">
-          <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-          </svg>
-          <span className="text-amber-400 text-xs font-medium">
-            🔒 This room is locked by the host. New users cannot join.
-          </span>
-        </div>
-      )}
-
-      {/* Feature 2: Room deleted notification */}
-      {deletedMessage && (
-        <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-1.5 flex items-center justify-between shrink-0">
-          <span className="text-red-400 text-xs font-medium">{deletedMessage}</span>
-          <button onClick={() => setDeletedMessage('')} className="text-red-400 hover:text-red-300">
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {/*
-        Phase 4: Responsive layout — row on lg+ (desktop/laptop), column on smaller.
-        flex-1 + overflow-hidden: workspace fills viewport height, page never scrolls.
-      */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
-
-        {/* ── Left column: Editor + Stdin + Output ── */}
+        {/* Left column: editor, stdin, output */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
-
-          {/*
-            Phase 1: flex-1 + min-h-0 lets the editor shrink when the stdin area
-            and output panel are open, giving a balanced IDE-like layout.
-          */}
           <div className="flex-1 p-2 min-h-0 overflow-hidden">
             <CollaborativeEditor
               yText={yText}
-              language={activeLanguage}
-              readOnly={isReadOnly || (isRoomLocked && !isHost)}
-              isHost={isHost}
+              authors={authors}
+              awareness={awareness}
+              language={language}
+              readOnly={!canEdit || !synced}
               fontSize={fontSize}
-              theme={isDark ? 'vs-dark' : 'vs'}
-              currentUsername={user?.username || ''}
-              activeUsers={activeUsers}
+              theme="vs-dark"
+              showAuthorNames={showAuthorNames}
             />
           </div>
 
-          {/*
-            Phase 6: Standard Input textarea.
-            Phase 7: stdin is LOCAL — each user types their own input before
-            clicking Run. It is NOT synced through Yjs. Shared collaborative
-            state remains: code content, presence, chat, and room state.
-          */}
-          <div className={`shrink-0 border-t ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-gray-50'} px-3 py-2`}>
-            <label
-              htmlFor="stdin-input"
-              className={`text-[11px] font-semibold uppercase tracking-wide block mb-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}
-            >
+          <div className="shrink-0 border-t border-gray-800 bg-gray-900/50 px-3 py-2">
+            <label htmlFor="stdin-input" className="text-[11px] font-semibold uppercase tracking-wide block mb-1 text-gray-500">
               Standard Input
             </label>
             <textarea
               id="stdin-input"
               value={stdin}
-              onChange={e => setStdin(e.target.value)}
+              onChange={(e) => setStdin(e.target.value)}
               placeholder="Type program input here before running… (e.g. 10 20)"
               rows={2}
-              className={`w-full text-xs font-mono rounded border px-2.5 py-1.5 resize-none focus:outline-none transition-colors
-                ${
-                  isDark
-                    ? 'bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-600 focus:border-indigo-500'
-                    : 'bg-white border-gray-300 text-gray-800 placeholder-gray-400 focus:border-indigo-400'
-                }`}
+              className="w-full text-xs font-mono rounded border px-2.5 py-1.5 resize-none focus:outline-none transition-colors bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-600 focus:border-indigo-500"
               style={{ minHeight: '44px', maxHeight: '100px' }}
             />
           </div>
 
-          {/* Feature 5: Output Panel */}
-          {showOutput && (
-            <OutputPanel
-              result={execResult}
-              isRunning={isRunning}
-              onClose={() => setShowOutput(false)}
-            />
-          )}
+          {showOutput && <OutputPanel result={execResult} isRunning={isRunning} onClose={() => setShowOutput(false)} />}
         </div>
 
-        {/*
-          Phase 3: Right sidebar — independently scrollable.
-          Phase 4: Full width below editor on small screens; 256px alongside on lg+.
-
-          Critical rules:
-          - lg:h-full     → fills the flex-row height on desktop
-          - max-h-[45vh]  → caps mobile height so editor stays usable
-          - overflow-y-auto → creates its own scroll context (AI Agent reachable)
-          - min-h-0       → flex child can shrink correctly
-        */}
-        <div className={`
-          w-full lg:w-64 xl:w-72 shrink-0
-          lg:h-full max-h-[45vh] lg:max-h-none
-          border-t lg:border-t-0 lg:border-l
-          ${isDark ? 'border-gray-800' : 'border-gray-200'}
-          overflow-y-auto overflow-x-hidden
-          min-h-0
-        `}>
+        {/* Right sidebar */}
+        <div className="w-full lg:w-64 xl:w-72 shrink-0 lg:h-full max-h-[45vh] lg:max-h-none border-t lg:border-t-0 lg:border-l border-gray-800 overflow-y-auto overflow-x-hidden min-h-0">
           <div className="flex flex-col gap-2.5 p-2.5">
             <RoomControls
-              roomCode={roomCode || ''}
-              roomName={room?.name || ''}
-              language={activeLanguage}
-              connected={yjsConnected}
+              roomCode={roomCode}
+              roomName={room.name}
+              language={language}
+              connected={status === 'connected' && synced}
               isHost={isHost}
               isReadOnly={isReadOnly}
               isRoomLocked={isRoomLocked}
               fontSize={fontSize}
+              canEdit={canEdit}
+              showAuthorNames={showAuthorNames}
+              onToggleAuthorNames={handleToggleAuthorNames}
               onLanguageChange={handleLanguageChange}
-              onLeaveRoom={handleLeaveRoom}
+              onLeaveRoom={() => navigate('/dashboard')}
               onToggleReadOnly={handleToggleReadOnly}
               onToggleRoomLock={handleToggleRoomLock}
               onDeleteRoom={handleDeleteRoom}
@@ -485,50 +411,42 @@ export function EditorPage() {
               isRunning={isRunning}
             />
 
-            <ActiveUsersPanel
-              users={activeUsers}
-              currentUsername={user?.username || ''}
-            />
+            <ActiveUsersPanel users={activeUsers} currentUsername={user?.username ?? ''} ownerUsername={room.ownerUsername} />
 
-            {/* Feature 7: Chat */}
             <ChatPanel
               messages={chatMessages}
-              currentUsername={user?.username || ''}
+              currentUsername={user?.username ?? ''}
               onSend={handleSendChat}
               isCollapsed={chatCollapsed}
               onToggle={handleChatToggle}
               unreadCount={unreadCount}
             />
 
-            {/* AI Agent */}
             <AgentPanel
-              currentCode={yText?.toString()}
-              currentLanguage={activeLanguage}
+              getCode={getCode}
+              currentLanguage={language}
               isCollapsed={agentCollapsed}
-              onToggle={() => setAgentCollapsed(prev => !prev)}
+              onToggle={() => setAgentCollapsed((prev) => !prev)}
             />
 
-            {/* AI Debug Agent */}
             <AgentDebugPanel
               yText={yText}
-              currentCode={yText?.toString() ?? ''}
-              currentLanguage={activeLanguage}
+              getCode={getCode}
+              currentLanguage={language}
+              canEdit={canEdit && synced}
               isCollapsed={debugCollapsed}
-              onToggle={() => setDebugCollapsed(prev => !prev)}
+              onToggle={() => setDebugCollapsed((prev) => !prev)}
             />
           </div>
         </div>
       </div>
 
-      {/* Feature 8: History Modal */}
       {showHistory && (
         <HistoryModal
-          roomCode={roomCode || ''}
-          isHost={isHost}
+          roomCode={roomCode}
+          canRestore={canEdit && synced}
           onClose={() => setShowHistory(false)}
-          onRestored={() => {
-            window.location.reload();
-          }}
+          onRestore={handleRestore}
         />
       )}
     </div>

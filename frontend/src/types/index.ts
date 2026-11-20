@@ -1,27 +1,3 @@
-export interface User {
-  id: number;
-  username: string;
-  email: string;
-}
-
-export interface AuthResponse {
-  token: string;
-  username: string;
-  email: string;
-  userId: number;
-}
-
-export interface LoginRequest {
-  username: string;
-  password: string;
-}
-
-export interface RegisterRequest {
-  username: string;
-  email: string;
-  password: string;
-}
-
 export interface Room {
   id: number;
   roomCode: string;
@@ -34,6 +10,8 @@ export interface Room {
   participants: string[];
   language: SupportedLanguage;
   locked: boolean;
+  /** Host-only editing mode (enforced by the server). */
+  readOnly: boolean;
 }
 
 export interface LockToggleEvent {
@@ -87,7 +65,8 @@ export interface ChatMessage {
 
 export interface RoomDeletedEvent {
   roomCode: string;
-  deletedBy: string;
+  deletedBy?: string;
+  reason?: "deleted" | "expired";
 }
 
 export interface SnapshotInfo {
@@ -147,11 +126,6 @@ export interface AgentDebugResponse {
   agentError: string | null;
 }
 
-export interface LineAuthorInfo {
-  username: string;
-  color: string;
-}
-
 export type SupportedLanguage =
   | 'javascript'
   | 'typescript'
@@ -177,39 +151,40 @@ export type SupportedLanguage =
 export interface LanguageConfig {
   label: string;
   monacoId: string;
-  judge0Id: number | null;
+  /** Whether the backend can execute this language (Wandbox has a compiler for it). */
+  runnable: boolean;
   extension: string;
   icon: string;
 }
 
 export const LANGUAGE_CONFIG: Record<SupportedLanguage, LanguageConfig> = {
-  javascript:  { label: 'JavaScript',  monacoId: 'javascript',  judge0Id: 63,  extension: 'js',   icon: '🟨' },
-  typescript:  { label: 'TypeScript',  monacoId: 'typescript',  judge0Id: 74,  extension: 'ts',   icon: '🔷' },
-  python:      { label: 'Python',      monacoId: 'python',      judge0Id: 71,  extension: 'py',   icon: '🐍' },
-  java:        { label: 'Java',        monacoId: 'java',        judge0Id: 62,  extension: 'java', icon: '☕' },
-  cpp:         { label: 'C++',         monacoId: 'cpp',         judge0Id: 54,  extension: 'cpp',  icon: '⚙️' },
-  c:           { label: 'C',           monacoId: 'c',           judge0Id: 50,  extension: 'c',    icon: '🔵' },
-  csharp:      { label: 'C#',          monacoId: 'csharp',      judge0Id: 51,  extension: 'cs',   icon: '💜' },
-  go:          { label: 'Go',          monacoId: 'go',          judge0Id: 60,  extension: 'go',   icon: '🐹' },
-  rust:        { label: 'Rust',        monacoId: 'rust',        judge0Id: 73,  extension: 'rs',   icon: '🦀' },
-  kotlin:      { label: 'Kotlin',      monacoId: 'kotlin',      judge0Id: 78,  extension: 'kt',   icon: '🎯' },
-  swift:       { label: 'Swift',       monacoId: 'swift',       judge0Id: 83,  extension: 'swift',icon: '🍎' },
-  ruby:        { label: 'Ruby',        monacoId: 'ruby',        judge0Id: 72,  extension: 'rb',   icon: '💎' },
-  php:         { label: 'PHP',         monacoId: 'php',         judge0Id: 68,  extension: 'php',  icon: '🐘' },
-  html:        { label: 'HTML',        monacoId: 'html',        judge0Id: null,extension: 'html', icon: '🌐' },
-  css:         { label: 'CSS',         monacoId: 'css',         judge0Id: null,extension: 'css',  icon: '🎨' },
-  json:        { label: 'JSON',        monacoId: 'json',        judge0Id: null,extension: 'json', icon: '📋' },
-  sql:         { label: 'SQL',         monacoId: 'sql',         judge0Id: 82,  extension: 'sql',  icon: '🗄️' },
-  markdown:    { label: 'Markdown',    monacoId: 'markdown',    judge0Id: null,extension: 'md',   icon: '📝' },
-  yaml:        { label: 'YAML',        monacoId: 'yaml',        judge0Id: null,extension: 'yaml', icon: '⚡' },
-  bash:        { label: 'Bash',        monacoId: 'shell',       judge0Id: 46,  extension: 'sh',   icon: '🖥️' },
+  javascript:  { label: 'JavaScript',  monacoId: 'javascript',  runnable: true,  extension: 'js',   icon: '🟨' },
+  typescript:  { label: 'TypeScript',  monacoId: 'typescript',  runnable: true,  extension: 'ts',   icon: '🔷' },
+  python:      { label: 'Python',      monacoId: 'python',      runnable: true,  extension: 'py',   icon: '🐍' },
+  java:        { label: 'Java',        monacoId: 'java',        runnable: true,  extension: 'java', icon: '☕' },
+  cpp:         { label: 'C++',         monacoId: 'cpp',         runnable: true,  extension: 'cpp',  icon: '⚙️' },
+  c:           { label: 'C',           monacoId: 'c',           runnable: true,  extension: 'c',    icon: '🔵' },
+  csharp:      { label: 'C#',          monacoId: 'csharp',      runnable: true,  extension: 'cs',   icon: '💜' },
+  go:          { label: 'Go',          monacoId: 'go',          runnable: true,  extension: 'go',   icon: '🐹' },
+  rust:        { label: 'Rust',        monacoId: 'rust',        runnable: true,  extension: 'rs',   icon: '🦀' },
+  kotlin:      { label: 'Kotlin',      monacoId: 'kotlin',      runnable: false, extension: 'kt',   icon: '🎯' },
+  swift:       { label: 'Swift',       monacoId: 'swift',       runnable: true,  extension: 'swift',icon: '🍎' },
+  ruby:        { label: 'Ruby',        monacoId: 'ruby',        runnable: true,  extension: 'rb',   icon: '💎' },
+  php:         { label: 'PHP',         monacoId: 'php',         runnable: true,  extension: 'php',  icon: '🐘' },
+  html:        { label: 'HTML',        monacoId: 'html',        runnable: false, extension: 'html', icon: '🌐' },
+  css:         { label: 'CSS',         monacoId: 'css',         runnable: false, extension: 'css',  icon: '🎨' },
+  json:        { label: 'JSON',        monacoId: 'json',        runnable: false, extension: 'json', icon: '📋' },
+  sql:         { label: 'SQL',         monacoId: 'sql',         runnable: true,  extension: 'sql',  icon: '🗄️' },
+  markdown:    { label: 'Markdown',    monacoId: 'markdown',    runnable: false, extension: 'md',   icon: '📝' },
+  yaml:        { label: 'YAML',        monacoId: 'yaml',        runnable: false, extension: 'yaml', icon: '⚡' },
+  bash:        { label: 'Bash',        monacoId: 'shell',       runnable: true,  extension: 'sh',   icon: '🖥️' },
 };
 
 export function isSupportedLanguage(value: string): value is SupportedLanguage {
   return value in LANGUAGE_CONFIG;
 }
 
-// User color palette (matches ActiveUsersPanel + gutter decorations)
+// User color palette (presence list, chat, remote cursors and line authorship all use it)
 export const USER_COLORS = [
   '#6366f1', // indigo
   '#10b981', // emerald

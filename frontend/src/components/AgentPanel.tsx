@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { agentService } from '../services/agentService';
+import { apiErrorMessage } from '../services/api';
 
 /**
  * AgentPanel — conversational AI assistant for CollabCode.
@@ -13,8 +14,8 @@ import { agentService } from '../services/agentService';
  */
 
 interface AgentPanelProps {
-  /** Pre-fill the prompt with the current editor code (optional). */
-  currentCode?: string;
+  /** Reads the live shared code when the user clicks “use editor code”. */
+  getCode: () => string;
   currentLanguage?: string;
   isCollapsed: boolean;
   onToggle: () => void;
@@ -23,7 +24,7 @@ interface AgentPanelProps {
 const MAX_PROMPT_LENGTH = 6000;
 
 export function AgentPanel({
-  currentCode,
+  getCode,
   currentLanguage,
   isCollapsed,
   onToggle,
@@ -42,7 +43,8 @@ export function AgentPanel({
   }, [response]);
 
   const handlePrefillCode = () => {
-    if (!currentCode) return;
+    const currentCode = getCode();
+    if (!currentCode.trim()) return;
     const lang = currentLanguage ?? 'code';
     const filled = `The following ${lang} code has an error. Identify the bug and suggest a fix:\n\n\`\`\`${lang}\n${currentCode.slice(0, 4000)}\n\`\`\``;
     setPrompt(filled);
@@ -60,11 +62,7 @@ export function AgentPanel({
       const result = await agentService.testPrompt(trimmed);
       setResponse(result);
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Failed to reach the AI agent. Please try again.';
-      setError(msg);
+      setError(apiErrorMessage(err, 'Failed to reach the AI agent. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -81,6 +79,7 @@ export function AgentPanel({
     <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
       {/* Header — toggle button */}
       <button
+        type="button"
         onClick={onToggle}
         className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-800/60 transition-colors text-left"
         aria-expanded={!isCollapsed}
@@ -108,14 +107,13 @@ export function AgentPanel({
           </p>
 
           {/* Pre-fill button */}
-          {currentCode && (
-            <button
-              onClick={handlePrefillCode}
-              className="w-full text-xs py-1 px-2 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200 border border-gray-700 transition-colors text-left"
-            >
-              ↑ Use current editor code as context
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handlePrefillCode}
+            className="w-full text-xs py-1 px-2 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200 border border-gray-700 transition-colors text-left"
+          >
+            ↑ Use current editor code as context
+          </button>
 
           {/* Prompt textarea */}
           <div className="relative">
@@ -135,6 +133,7 @@ export function AgentPanel({
 
           {/* Submit */}
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={loading || !prompt.trim()}
             className={`w-full py-1.5 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-2
@@ -178,6 +177,7 @@ export function AgentPanel({
                 {response}
               </div>
               <button
+                type="button"
                 onClick={() => { setResponse(''); setPrompt(''); setError(''); }}
                 className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
               >

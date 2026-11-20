@@ -1,66 +1,42 @@
-import { useEffect, useRef, useState } from 'react';
-import * as Y from 'yjs';
-import { CollaborationProvider } from '../services/collaborationService';
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { CollabSession, type CollabIdentity } from '../collab/collabSession';
 import { useAuth } from '../contexts/AuthContext';
-import { useUser } from '@clerk/clerk-react';
 
-interface UseCollaborationReturn {
-  yDoc: Y.Doc;
-  yText: Y.Text;
-  provider: CollaborationProvider | null;
-  connected: boolean;
-}
-
-export function useCollaboration(roomCode: string): UseCollaborationReturn {
-  const docRef = useRef<Y.Doc>(new Y.Doc());
-  const providerRef = useRef<CollaborationProvider | null>(null);
-  const [connected, setConnected] = useState(false);
+/**
+ * Connects to a room's shared document once `enabled` is true (i.e. after the
+ * REST join succeeded — the server only accepts sockets from participants).
+ */
+export function useCollaboration(roomCode: string, enabled: boolean, identity: CollabIdentity | null) {
   const { getToken } = useAuth();
-  const { user } = useUser();
+  const session = useMemo(() => new CollabSession(roomCode), [roomCode]);
+  const state = useSyncExternalStore(session.subscribe, session.getSnapshot);
 
-  // Store user display info in refs so we can read latest values
-  // without them being a dependency that tears down the WebSocket on change.
-  const userNameRef = useRef<string>('');
-  const userImageUrlRef = useRef<string>('');
+  // Latest token getter without making it a reconnect trigger.
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
-  // Keep refs in sync with latest Clerk user data
-  userNameRef.current = user?.fullName || user?.firstName || user?.username || '';
-  userImageUrlRef.current = user?.imageUrl || '';
+  const ready = enabled && identity !== null;
+  const identityRef = useRef(identity);
+  useEffect(() => {
+    identityRef.current = identity;
+    if (identity) session.updateIdentity(identity);
+  }, [identity, session]);
 
   useEffect(() => {
-    // Only (re)connect when roomCode or getToken changes — NOT on user field changes.
-    const doc = new Y.Doc();
-    docRef.current = doc;
-
-    // Read the current name/imageUrl at connection time from refs
-    const provider = new CollaborationProvider(
-      roomCode,
-      doc,
-      getToken,
-      userNameRef.current,
-      userImageUrlRef.current
-    );
-    providerRef.current = provider;
-
-    const unsubscribe = provider.onConnectionChange((isConnected) => {
-      setConnected(isConnected);
-    });
-
-    return () => {
-      unsubscribe();
-      provider.destroy();
-      doc.destroy();
-      providerRef.current = null;
-    };
-    // Intentionally ONLY depend on roomCode and getToken.
-    // userName and imageUrl are read from refs at connect time.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomCode, getToken]);
+    if (!ready || !identityRef.current) return;
+    session.start((opts) => getTokenRef.current(opts), identityRef.current);
+    return () => session.stop();
+  }, [ready, session]);
 
   return {
-    yDoc: docRef.current,
-    yText: docRef.current.getText('monaco'),
-    provider: providerRef.current,
-    connected,
+    session,
+    yDoc: session.doc,
+    yText: session.text,
+    authors: session.authors,
+    awareness: state.awareness,
+    status: state.status,
+    synced: state.synced,
   };
 }

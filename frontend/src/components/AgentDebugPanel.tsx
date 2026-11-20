@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import * as Y from 'yjs';
 import { agentService } from '../services/agentService';
+import { apiErrorMessage } from '../services/api';
+import { normalizeLineEndings, replaceSharedText } from '../collab/textEdits';
 import type { AgentDebugResponse } from '../types';
 import {
   toast,
@@ -33,9 +35,11 @@ import {
 interface AgentDebugPanelProps {
   /** Live Y.Text from useCollaboration — same instance as the editor. */
   yText: Y.Text;
-  /** Current editor content (for sending to agent + displaying original). */
-  currentCode: string;
+  /** Reads the live shared code (the page does not re-render on every keystroke). */
+  getCode: () => string;
   currentLanguage: string;
+  /** False when the room is host-only and this user is not the host. */
+  canEdit: boolean;
   isCollapsed: boolean;
   onToggle: () => void;
 }
@@ -107,8 +111,9 @@ function ExecutionBlock({
 
 export function AgentDebugPanel({
   yText,
-  currentCode,
+  getCode,
   currentLanguage,
+  canEdit,
   isCollapsed,
   onToggle,
 }: AgentDebugPanelProps) {
@@ -118,6 +123,8 @@ export function AgentDebugPanel({
   const [errorMessage, setErrorMessage] = useState('');
   const [showDiff, setShowDiff] = useState<'original' | 'fix'>('fix');
   const [confirmApproveOpen, setConfirmApproveOpen] = useState(false);
+  /** True when the shared code changed after the agent ran (checked when the dialog opens). */
+  const [codeChangedSinceRun, setCodeChangedSinceRun] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
 
   // Scroll result into view when it arrives
@@ -128,7 +135,12 @@ export function AgentDebugPanel({
   }, [agentState]);
 
   const handleRunAgent = async () => {
-    if (!currentCode.trim()) return;
+    const currentCode = getCode();
+    if (!currentCode.trim()) {
+      setErrorMessage('The editor is empty — write some code first.');
+      setAgentState('error');
+      return;
+    }
     setAgentState('running');
     setResult(null);
     setErrorMessage('');
@@ -142,28 +154,26 @@ export function AgentDebugPanel({
       setResult(res);
       setAgentState('awaiting_approval');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Agent request failed. Please try again.';
-      setErrorMessage(msg);
+      setErrorMessage(apiErrorMessage(err, 'Agent request failed. Please try again.'));
       setAgentState('error');
     }
   };
 
+  const openApproveDialog = () => {
+    if (!result) return;
+    setCodeChangedSinceRun(normalizeLineEndings(getCode()) !== normalizeLineEndings(result.originalCode));
+    setConfirmApproveOpen(true);
+  };
+
   /**
-   * Apply the proposed fix to the shared Yjs Y.Text.
-   * Wrapped in a Yjs transaction so all peers see a single atomic edit
-   * (identical to the user typing the entire fix at once).
+   * Apply the proposed fix to the shared Y.Text as ONE minimal Yjs transaction:
+   * only the changed region is replaced, so collaborators' edits elsewhere and
+   * line authorship are preserved (the old delete-everything + insert-everything
+   * wiped concurrent edits and attributed every line to the approver).
    */
   const handleApprove = () => {
-    if (!result?.proposedFix) return;
-
-    const fix = result.proposedFix;
-
-    // Apply atomically inside a Yjs transaction
-    yText.doc?.transact(() => {
-      yText.delete(0, yText.length);
-      yText.insert(0, fix);
-    });
-
+    if (!result?.proposedFix || !canEdit) return;
+    replaceSharedText(yText, result.proposedFix, 'ai-fix');
     setAgentState('approved');
     toast.success('AI patch applied to shared editor');
   };
@@ -184,6 +194,7 @@ export function AgentDebugPanel({
     <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
       {/* ── Header ── */}
       <button
+        type="button"
         onClick={onToggle}
         className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-800/60 transition-colors text-left"
         aria-expanded={!isCollapsed}
@@ -240,13 +251,9 @@ export function AgentDebugPanel({
               )}
 
               <button
+                type="button"
                 onClick={handleRunAgent}
-                disabled={!currentCode.trim()}
-                className={`w-full py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-2
-                  ${!currentCode.trim()
-                    ? 'bg-violet-900/30 text-violet-600 cursor-not-allowed border border-violet-800/30'
-                    : 'bg-violet-600 hover:bg-violet-500 text-white border border-violet-500 shadow-sm'
-                  }`}
+                className="w-full py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 text-white border border-violet-500 shadow-sm"
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                   <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" />
@@ -328,12 +335,14 @@ export function AgentDebugPanel({
                     </div>
                     <div className="flex rounded overflow-hidden border border-gray-700 text-[10px]">
                       <button
+                        type="button"
                         onClick={() => setShowDiff('original')}
                         className={`px-2 py-0.5 transition-colors ${showDiff === 'original' ? 'bg-gray-700 text-gray-200' : 'text-gray-500 hover:text-gray-300'}`}
                       >
                         Original
                       </button>
                       <button
+                        type="button"
                         onClick={() => setShowDiff('fix')}
                         className={`px-2 py-0.5 transition-colors ${showDiff === 'fix' ? 'bg-violet-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}
                       >
@@ -358,10 +367,12 @@ export function AgentDebugPanel({
               <div className="flex gap-2 pt-1">
                 <CollabTooltip content="Review and approve fix before applying to room" side="top">
                   <button
-                    onClick={() => setConfirmApproveOpen(true)}
-                    disabled={!result.proposedFix}
+                    type="button"
+                    onClick={openApproveDialog}
+                    disabled={!result.proposedFix || !canEdit}
+                    title={canEdit ? undefined : 'Only the host can apply changes while the room is host-only'}
                     className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer
-                      ${result.proposedFix
+                      ${result.proposedFix && canEdit
                         ? 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500'
                         : 'bg-gray-800 text-gray-600 cursor-not-allowed border border-gray-700'
                       }`}
@@ -374,6 +385,7 @@ export function AgentDebugPanel({
                 </CollabTooltip>
                 <CollabTooltip content="Discard patch and keep code untouched" side="top">
                   <button
+                    type="button"
                     onClick={handleReject}
                     className="flex-1 py-2 px-3 rounded-md text-xs font-semibold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                   >
@@ -399,8 +411,16 @@ export function AgentDebugPanel({
                       </span>
                     </CollabAlertDialogTitle>
                     <CollabAlertDialogDescription>
-                      The AI-generated patch has been verified against the execution environment. Approving will atomically apply this patch to the shared collaborative editor for all connected collaborators.
+                      {result?.success
+                        ? 'The AI-generated patch compiled and ran successfully in the sandbox. '
+                        : 'The AI could not fully verify this patch — review it carefully. '}
+                      Approving applies it to the shared editor for everyone in one step.
                     </CollabAlertDialogDescription>
+                    {codeChangedSinceRun && (
+                      <p className="mt-2 text-[11px] text-amber-400 bg-amber-900/20 border border-amber-500/20 rounded px-2 py-1.5">
+                        ⚠ The code has changed since the agent ran. Applying the fix will overwrite those newer changes in the region it modifies.
+                      </p>
+                    )}
                   </CollabAlertDialogHeader>
 
                   {result && (
@@ -450,7 +470,7 @@ export function AgentDebugPanel({
                 </svg>
                 Fix applied to the shared editor. All collaborators now see the updated code.
               </div>
-              <button onClick={handleReset} className="w-full text-xs text-gray-500 hover:text-gray-300 transition-colors py-1">
+              <button type="button" onClick={handleReset} className="w-full text-xs text-gray-500 hover:text-gray-300 transition-colors py-1">
                 Start another session
               </button>
             </div>
@@ -462,7 +482,7 @@ export function AgentDebugPanel({
               <div className="text-[11px] text-gray-400 bg-gray-800/50 border border-gray-700 rounded-md px-3 py-2">
                 Fix rejected — your code is unchanged.
               </div>
-              <button onClick={handleReset} className="w-full text-xs text-gray-500 hover:text-gray-300 transition-colors py-1">
+              <button type="button" onClick={handleReset} className="w-full text-xs text-gray-500 hover:text-gray-300 transition-colors py-1">
                 Try again
               </button>
             </div>

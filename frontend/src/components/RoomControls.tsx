@@ -32,6 +32,10 @@ interface RoomControlsProps {
   onShowHistory: () => void;
   onFontSizeChange: (size: number) => void;
   isRunning: boolean;
+  /** False while the room is host-only and this user is not the host. */
+  canEdit: boolean;
+  showAuthorNames: boolean;
+  onToggleAuthorNames: () => void;
 }
 
 export function RoomControls({
@@ -53,6 +57,9 @@ export function RoomControls({
   onShowHistory,
   onFontSizeChange,
   isRunning,
+  canEdit,
+  showAuthorNames,
+  onToggleAuthorNames,
 }: RoomControlsProps) {
   const [copied, setCopied] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -105,7 +112,7 @@ export function RoomControls({
     }
   }, [dropdownOpen]);
 
-  const canRun = LANGUAGE_CONFIG[language].judge0Id !== null;
+  const canRun = LANGUAGE_CONFIG[language].runnable;
 
   return (
     <div className="rounded border p-3 space-y-3" style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}>
@@ -181,8 +188,11 @@ export function RoomControls({
       <div ref={dropdownRef} className="relative">
         <label className="text-[10px] uppercase tracking-widest font-code block mb-1" style={{ color: 'var(--cc-text-muted)' }}>Language</label>
         <button
+          type="button"
           onClick={() => setDropdownOpen(!dropdownOpen)}
-          className="w-full flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border focus:outline-none transition-colors"
+          disabled={!canEdit}
+          title={canEdit ? undefined : "Only the host can change the language while the room is host-only"}
+          className="w-full flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ background: 'var(--cc-surface-el)', color: 'var(--cc-text)', borderColor: dropdownOpen ? 'var(--cc-accent)' : 'var(--cc-border)' }}
         >
           <span>{currentConfig.icon}</span>
@@ -221,7 +231,7 @@ export function RoomControls({
                   >
                     <span>{config.icon}</span>
                     <span>{config.label}</span>
-                    {config.judge0Id !== null && (
+                    {config.runnable && (
                       <span className="ml-auto text-[10px]" style={{ color: 'var(--cc-success)' }}>▶</span>
                     )}
                   </button>
@@ -237,6 +247,7 @@ export function RoomControls({
         <label className="text-[10px] uppercase tracking-widest font-code block mb-1" style={{ color: 'var(--cc-text-muted)' }}>Font Size</label>
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={() => onFontSizeChange(Math.max(12, fontSize - 1))}
             disabled={fontSize <= 12}
             className="w-7 h-7 rounded transition-colors flex items-center justify-center text-sm font-code disabled:opacity-40"
@@ -246,6 +257,7 @@ export function RoomControls({
           </button>
           <span className="flex-1 text-center text-xs font-code" style={{ color: 'var(--cc-text)' }}>{fontSize}px</span>
           <button
+            type="button"
             onClick={() => onFontSizeChange(Math.min(24, fontSize + 1))}
             disabled={fontSize >= 24}
             className="w-7 h-7 rounded transition-colors flex items-center justify-center text-sm font-code disabled:opacity-40"
@@ -261,6 +273,7 @@ export function RoomControls({
         {/* Run Code */}
         {canRun && (
           <button
+            type="button"
             onClick={onRunCode}
             disabled={isRunning}
             className="w-full flex items-center justify-center gap-2 text-xs font-medium py-1.5 rounded transition-colors"
@@ -290,6 +303,7 @@ export function RoomControls({
 
         {/* Download */}
         <button
+          type="button"
           onClick={onDownload}
           className="w-full flex items-center justify-center gap-2 text-xs py-1.5 rounded transition-colors border"
           style={{ background: 'var(--cc-surface-el)', color: 'var(--cc-text-sec)', borderColor: 'var(--cc-border)' }}
@@ -300,8 +314,25 @@ export function RoomControls({
           Download
         </button>
 
+        {/* Line authorship labels */}
+        <button
+          type="button"
+          onClick={onToggleAuthorNames}
+          aria-pressed={showAuthorNames}
+          className="w-full flex items-center justify-center gap-2 text-xs py-1.5 rounded transition-colors border"
+          style={showAuthorNames
+            ? { background: "var(--cc-accent-dim)", color: "var(--cc-accent)", borderColor: "rgba(57,197,207,0.35)" }
+            : { background: "var(--cc-surface-el)", color: "var(--cc-text-sec)", borderColor: "var(--cc-border)" }}
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          {showAuthorNames ? "Hide Line Authors" : "Show Line Authors"}
+        </button>
+
         {/* History */}
         <button
+          type="button"
           onClick={onShowHistory}
           className="w-full flex items-center justify-center gap-2 text-xs py-1.5 rounded transition-colors border"
           style={{ background: 'var(--cc-surface-el)', color: 'var(--cc-text-sec)', borderColor: 'var(--cc-border)' }}
@@ -315,6 +346,7 @@ export function RoomControls({
         {/* Read-Only Toggle (Host Only) */}
         {isHost && (
           <button
+            type="button"
             onClick={onToggleReadOnly}
             className="w-full flex items-center justify-center gap-2 text-xs py-1.5 rounded transition-colors border"
             style={isReadOnly ? {
@@ -332,14 +364,14 @@ export function RoomControls({
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
-                Enable Editing
+                Let Everyone Edit
               </>
             ) : (
               <>
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
                 </svg>
-                Disable Editing
+                Host-Only Editing
               </>
             )}
           </button>
@@ -348,6 +380,7 @@ export function RoomControls({
         {/* Room Lock Toggle (Host Only) */}
         {isHost && onToggleRoomLock && (
           <button
+            type="button"
             onClick={onToggleRoomLock}
             className="w-full flex items-center justify-center gap-2 text-xs py-1.5 rounded transition-colors border"
             style={isRoomLocked ? {

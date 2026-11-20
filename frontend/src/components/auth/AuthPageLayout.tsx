@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useSignIn, useSignUp } from '@clerk/clerk-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { safeRedirect } from '../../utils/redirect';
 import { motion, useReducedMotion } from 'motion/react';
 
 interface AuthPageLayoutProps {
   initialMode: 'signin' | 'signup';
 }
+
+type CodeStep = 'signup' | 'second-factor' | 'reset';
+type SecondFactor = { strategy: string; emailAddressId?: string; phoneNumberId?: string };
 
 function getClerkErrorMessage(err: unknown, fallback: string): string {
   if (typeof err === 'object' && err !== null && 'errors' in err) {
@@ -134,6 +138,8 @@ function MiniProductPreview() {
 
 export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = safeRedirect(searchParams.get('redirect'));
   const { isAuthenticated, loading: authLoading } = useAuth();
   const shouldReduceMotion = useReducedMotion();
 
@@ -153,7 +159,10 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   // Email verification state for Clerk sign-up requirement
-  const [verifying, setVerifying] = useState(false);
+  const [codeStep, setCodeStep] = useState<CodeStep | null>(null);
+  const verifying = codeStep !== null;
+  const [secondFactor, setSecondFactor] = useState<SecondFactor | null>(null);
+  const [newPassword, setNewPassword] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [isVerifyingSubmitting, setIsVerifyingSubmitting] = useState(false);
@@ -167,17 +176,18 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
   // If already authenticated, redirect to /dashboard
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      navigate('/dashboard', { replace: true });
+      navigate(redirectTo, { replace: true });
     }
-  }, [authLoading, isAuthenticated, navigate]);
+  }, [authLoading, isAuthenticated, navigate, redirectTo]);
 
   const switchMode = (newMode: 'signin' | 'signup') => {
     setMode(newMode);
     setError(null);
-    setVerifying(false);
+    setCodeStep(null);
     setVerificationCode('');
     setVerificationError(null);
-    navigate(newMode === 'signin' ? '/login' : '/register', { replace: true });
+    const query = redirectTo !== '/dashboard' ? `?redirect=${encodeURIComponent(redirectTo)}` : '';
+    navigate((newMode === 'signin' ? '/login' : '/register') + query, { replace: true });
   };
 
   // Google OAuth handler
@@ -187,23 +197,96 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
 
     try {
       if (mode === 'signin') {
-        if (!isSignInLoaded || !signIn) return;
+        if (!isSignInLoaded || !signIn) {
+          setIsGoogleLoading(false);
+          return;
+        }
         await signIn.authenticateWithRedirect({
           strategy: 'oauth_google',
           redirectUrl: '/sso-callback',
-          redirectUrlComplete: '/dashboard',
+          redirectUrlComplete: redirectTo,
         });
       } else {
-        if (!isSignUpLoaded || !signUp) return;
+        if (!isSignUpLoaded || !signUp) {
+          setIsGoogleLoading(false);
+          return;
+        }
         await signUp.authenticateWithRedirect({
           strategy: 'oauth_google',
           redirectUrl: '/sso-callback',
-          redirectUrlComplete: '/dashboard',
+          redirectUrlComplete: redirectTo,
         });
       }
     } catch (err: unknown) {
       setIsGoogleLoading(false);
       setError(getClerkErrorMessage(err, 'Failed to initialize Google authentication.'));
+    }
+  };
+
+  type SignInResult = NonNullable<typeof signIn>;
+
+  /**
+   * Completes a sign-in attempt. Besides "complete", Clerk can ask for a second factor
+   * (2FA) or — with Client Trust enabled — verification of a new device
+   * ("needs_client_trust"). Previously anything but "complete" was a dead end.
+   */
+  const finishSignIn = async (result: SignInResult) => {
+    const status = result.status as string;
+    if (status === 'complete') {
+      await setSignInActive?.({ session: result.createdSessionId });
+      navigate(redirectTo, { replace: true });
+      return;
+    }
+    if (status === 'needs_second_factor' || status === 'needs_client_trust') {
+      await startSecondFactor(result);
+      return;
+    }
+    if (status === 'needs_new_password') {
+      setError('This account needs a new password. Use "Forgot password?" to set one.');
+      return;
+    }
+    setError(`Sign-in requires a step this page does not support yet (${status}).`);
+  };
+
+  const startSecondFactor = async (result: SignInResult) => {
+    const factors = (result.supportedSecondFactors ?? []) as unknown as SecondFactor[];
+    const factor = ['totp', 'email_code', 'phone_code']
+      .map((strategy) => factors.find((f) => f.strategy === strategy))
+      .find(Boolean) ?? { strategy: 'email_code' };
+    await prepareSecondFactor(result, factor);
+    setSecondFactor(factor);
+    setVerificationCode('');
+    setVerificationError(null);
+    setCodeStep('second-factor');
+  };
+
+  const prepareSecondFactor = async (result: SignInResult, factor: SecondFactor) => {
+    if (factor.strategy === 'totp') return; // authenticator app: nothing to send
+    const params = factor.strategy === 'phone_code'
+      ? { strategy: 'phone_code', phoneNumberId: factor.phoneNumberId }
+      : { strategy: 'email_code', emailAddressId: factor.emailAddressId };
+    await result.prepareSecondFactor(params as Parameters<SignInResult['prepareSecondFactor']>[0]);
+  };
+
+  // Forgot password → Clerk emails a reset code
+  const handleForgotPassword = async () => {
+    if (!isSignInLoaded || !signIn) return;
+    if (!email.trim()) {
+      setError('Enter your email address first, then click "Forgot password?".');
+      return;
+    }
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await signIn.create({ strategy: 'reset_password_email_code', identifier: email.trim() });
+      setVerificationCode('');
+      setNewPassword('');
+      setVerificationError(null);
+      setCodeStep('reset');
+    } catch (err: unknown) {
+      setError(getClerkErrorMessage(err, 'Could not send a password reset code.'));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -226,12 +309,7 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
         password,
       });
 
-      if (result.status === 'complete') {
-        await setSignInActive({ session: result.createdSessionId });
-        navigate('/dashboard');
-      } else {
-        setError(`Additional verification step required: ${result.status}`);
-      }
+      await finishSignIn(result);
     } catch (err: unknown) {
       setError(getClerkErrorMessage(err, 'Invalid email or password.'));
     } finally {
@@ -270,10 +348,10 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
 
       if (result.status === 'complete') {
         await setSignUpActive({ session: result.createdSessionId });
-        navigate('/dashboard');
+        navigate(redirectTo, { replace: true });
       } else if (result.status === 'missing_requirements') {
         await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-        setVerifying(true);
+        setCodeStep('signup');
       } else {
         setError(`Account creation status: ${result.status}`);
       }
@@ -287,12 +365,15 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
   // Verification Code handler (when Clerk requires email code during sign up)
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isSignUpLoaded || !signUp) return;
-
     if (!verificationCode.trim()) {
       setVerificationError('Please enter the 6-digit verification code.');
       return;
     }
+    if (codeStep === 'second-factor' || codeStep === 'reset') {
+      await handleSignInCode();
+      return;
+    }
+    if (!isSignUpLoaded || !signUp) return;
 
     setVerificationError(null);
     setIsVerifyingSubmitting(true);
@@ -304,7 +385,7 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
 
       if (result.status === 'complete') {
         await setSignUpActive({ session: result.createdSessionId });
-        navigate('/dashboard');
+        navigate(redirectTo, { replace: true });
       } else {
         setVerificationError(`Verification status: ${result.status}`);
       }
@@ -315,7 +396,53 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
     }
   };
 
+  /** Second-factor and password-reset codes belong to the sign-in attempt. */
+  const handleSignInCode = async () => {
+    if (!isSignInLoaded || !signIn) return;
+    if (codeStep === 'reset' && newPassword.length < 8) {
+      setVerificationError('Choose a new password with at least 8 characters.');
+      return;
+    }
+    setVerificationError(null);
+    setIsVerifyingSubmitting(true);
+    try {
+      const result = codeStep === 'reset'
+        ? await signIn.attemptFirstFactor({ strategy: 'reset_password_email_code', code: verificationCode.trim(), password: newPassword })
+        : await signIn.attemptSecondFactor({ strategy: (secondFactor?.strategy ?? 'email_code'), code: verificationCode.trim() } as Parameters<typeof signIn.attemptSecondFactor>[0]);
+      const status = result.status as string;
+      if (status === 'complete') {
+        await setSignInActive?.({ session: result.createdSessionId });
+        navigate(redirectTo, { replace: true });
+      } else if (status === 'needs_second_factor' || status === 'needs_client_trust') {
+        await startSecondFactor(result);
+      } else {
+        setVerificationError(`Verification status: ${status}`);
+      }
+    } catch (err: unknown) {
+      setVerificationError(getClerkErrorMessage(err, 'Invalid code. Please try again.'));
+    } finally {
+      setIsVerifyingSubmitting(false);
+    }
+  };
+
   const handleResendCode = async () => {
+    if (codeStep === 'reset') {
+      await handleForgotPassword();
+      setResendSuccess(true);
+      setTimeout(() => setResendSuccess(false), 4000);
+      return;
+    }
+    if (codeStep === 'second-factor') {
+      if (!signIn || !secondFactor || secondFactor.strategy === 'totp') return;
+      try {
+        await prepareSecondFactor(signIn, secondFactor);
+        setResendSuccess(true);
+        setTimeout(() => setResendSuccess(false), 4000);
+      } catch (err: unknown) {
+        setVerificationError(getClerkErrorMessage(err, 'Failed to resend code. Please try again in a moment.'));
+      }
+      return;
+    }
     if (!isSignUpLoaded || !signUp) return;
     try {
       await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
@@ -492,10 +619,16 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
               <div className="flex items-center justify-between pb-5 mb-5 border-b" style={{ borderColor: 'var(--cc-border-subtle)' }}>
                 <div>
                   <h2 className="text-lg font-bold tracking-tight" style={{ color: 'var(--cc-text)' }}>
-                    {verifying ? 'Verify Email' : mode === 'signin' ? 'Sign in to workspace' : 'Create an account'}
+                    {codeStep === 'reset' ? 'Reset password'
+                      : codeStep === 'second-factor' ? 'Two-step verification'
+                      : verifying ? 'Verify Email' : mode === 'signin' ? 'Sign in to workspace' : 'Create an account'}
                   </h2>
                   <p className="text-xs mt-1" style={{ color: 'var(--cc-text-sec)' }}>
-                    {verifying
+                    {codeStep === 'second-factor' && secondFactor?.strategy === 'totp'
+                      ? 'Enter the code from your authenticator app'
+                      : codeStep === 'second-factor' && secondFactor?.strategy === 'phone_code'
+                      ? 'Enter the code we texted to your phone'
+                      : verifying
                       ? `Code sent to ${email}`
                       : mode === 'signin'
                       ? 'Continue to your CollabCode rooms'
@@ -588,6 +721,23 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
                     />
                   </div>
 
+                  {codeStep === 'reset' && (
+                    <div>
+                      <label className="block text-xs font-mono mb-1.5" style={{ color: 'var(--cc-text-sec)' }}>
+                        NEW PASSWORD
+                      </label>
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="At least 8 characters"
+                        autoComplete="new-password"
+                        className="w-full text-sm px-3 py-2.5 rounded border focus:outline-none transition-colors"
+                        style={{ background: 'var(--cc-surface-el)', borderColor: 'var(--cc-border)', color: 'var(--cc-text)' }}
+                      />
+                    </div>
+                  )}
+
                   <button
                     type="submit"
                     disabled={isVerifyingSubmitting || verificationCode.length < 6}
@@ -610,11 +760,12 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
                   <div className="flex items-center justify-between pt-2 text-xs" style={{ color: 'var(--cc-text-muted)' }}>
                     <button
                       type="button"
-                      onClick={() => setVerifying(false)}
+                      onClick={() => setCodeStep(null)}
                       className="hover:underline cursor-pointer"
                     >
-                      ← Back to edit email
+                      ← Back
                     </button>
+                    {!(codeStep === 'second-factor' && secondFactor?.strategy === 'totp') && (
                     <button
                       type="button"
                       onClick={handleResendCode}
@@ -623,6 +774,7 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
                     >
                       Resend code
                     </button>
+                    )}
                   </div>
                 </form>
               ) : (
@@ -730,7 +882,17 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
                         <label className="block text-xs font-mono" style={{ color: 'var(--cc-text-sec)' }}>
                           PASSWORD
                         </label>
-                        {mode === 'signin' && (
+                        {mode === 'signin' ? (
+                          <button
+                            type="button"
+                            onClick={handleForgotPassword}
+                            disabled={isSubmitting || !isFormReady}
+                            className="text-[11px] hover:underline cursor-pointer disabled:opacity-50"
+                            style={{ color: 'var(--cc-accent)' }}
+                          >
+                            Forgot password?
+                          </button>
+                        ) : (
                           <span className="text-[11px]" style={{ color: 'var(--cc-text-muted)' }}>
                             Min 8 characters
                           </span>

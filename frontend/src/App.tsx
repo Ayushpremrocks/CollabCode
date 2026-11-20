@@ -27,8 +27,8 @@ function App() {
                 path="/sso-callback"
                 element={
                   <AuthenticateWithRedirectCallback
-                    signInForceRedirectUrl="/dashboard"
-                    signUpForceRedirectUrl="/dashboard"
+                    signInFallbackRedirectUrl="/dashboard"
+                    signUpFallbackRedirectUrl="/dashboard"
                   />
                 }
               />

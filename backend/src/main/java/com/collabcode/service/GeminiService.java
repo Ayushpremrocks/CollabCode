@@ -2,81 +2,72 @@ package com.collabcode.service;
 
 import com.google.genai.Client;
 import com.google.genai.types.GenerateContentResponse;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * GeminiService — the reasoning layer for the CollabCode AI agent.
+ * Thin wrapper around the Google Gen AI SDK.
  *
- * Phase 1: Simple prompt → response wrapper around the Google Gen AI SDK.
- * Future phases will extend this with tool/function calling, multi-turn
- * conversation memory, and autonomous debugging loop support.
- *
- * Security: GEMINI_API_KEY is backend-only. It is never logged, never
- * returned in responses, and has no frontend equivalent (no VITE_* var).
+ * One shared {@link Client} is created lazily and closed on shutdown (the SDK
+ * client is AutoCloseable; the previous version built — and leaked — a new one
+ * per request). GEMINI_API_KEY never leaves the backend.
  */
 @Service
 public class GeminiService {
 
     private static final Logger log = LoggerFactory.getLogger(GeminiService.class);
 
-    /**
-     * Model to use.
-     * gemini-3.6-flash: verified working with this project's API key.
-     * Fast, cost-efficient, and supports function calling for the agentic loop.
-     */
-    private static final String MODEL = "gemini-3.6-flash";
+    private final String apiKey;
+    private final String model;
+    private volatile Client client;
 
-    @Value("${app.gemini.api-key:}")
-    private String apiKey;
+    public GeminiService(@Value("${app.gemini.api-key:}") String apiKey,
+                         @Value("${app.gemini.model:gemini-3.6-flash}") String model) {
+        this.apiKey = apiKey;
+        this.model = model;
+    }
 
     /**
-     * Sends a plain text prompt to Gemini and returns the text response.
-     *
-     * @param prompt the user/agent prompt (must not be null or blank)
-     * @return the model's text output
      * @throws IllegalStateException if the API key is not configured
-     * @throws RuntimeException      if the Gemini API call fails
+     * @throws RuntimeException      with a user-safe message if the API call fails
      */
     public String generate(String prompt) {
         if (apiKey == null || apiKey.isBlank()) {
-            log.error("[GeminiService] GEMINI_API_KEY is not configured. " +
-                      "Add it to backend/.env (local) or Render environment variables (production).");
-            throw new IllegalStateException(
-                "Gemini API key is not configured. Contact the administrator.");
+            log.error("[Gemini] GEMINI_API_KEY is not configured");
+            throw new IllegalStateException("The AI assistant is not configured on the server.");
         }
-
-        log.debug("[GeminiService] Sending prompt to Gemini ({} chars)", prompt.length());
-
         try {
-            // Build a per-request client — lightweight, uses the API key directly.
-            // Future: share a singleton client once production load warrants it.
-            Client client = Client.builder().apiKey(apiKey).build();
-
-            GenerateContentResponse response = client
-                    .models
-                    .generateContent(MODEL, prompt, null);
-
+            GenerateContentResponse response = client().models.generateContent(model, prompt, null);
             String text = response.text();
-            log.debug("[GeminiService] Received response ({} chars)", text != null ? text.length() : 0);
             return text != null ? text : "";
-
-        } catch (IllegalStateException e) {
-            // Re-throw config errors as-is
-            throw e;
         } catch (Exception e) {
-            // Log the full error chain WITHOUT the API key so Render logs show the root cause.
-            // e.getMessage() may contain the HTTP status + Gemini error body — safe to log.
-            Throwable cause = e.getCause() != null ? e.getCause() : e;
-            log.error("[GeminiService] Gemini API call failed.");
-            log.error("[GeminiService]   Model           : {}", MODEL);
-            log.error("[GeminiService]   Exception class : {}", e.getClass().getName());
-            log.error("[GeminiService]   Exception msg   : {}", e.getMessage());
-            log.error("[GeminiService]   Cause class     : {}", cause.getClass().getName());
-            log.error("[GeminiService]   Cause msg       : {}", cause.getMessage());
+            log.error("[Gemini] Call to model {} failed: {}: {}", model, e.getClass().getSimpleName(), e.getMessage());
             throw new RuntimeException("AI service is temporarily unavailable. Please try again later.", e);
+        }
+    }
+
+    private Client client() {
+        if (client == null) {
+            synchronized (this) {
+                if (client == null) {
+                    client = Client.builder().apiKey(apiKey).build();
+                }
+            }
+        }
+        return client;
+    }
+
+    @PreDestroy
+    void close() {
+        if (client != null) {
+            try {
+                client.close();
+            } catch (Exception e) {
+                log.debug("[Gemini] Error closing client: {}", e.getMessage());
+            }
         }
     }
 }

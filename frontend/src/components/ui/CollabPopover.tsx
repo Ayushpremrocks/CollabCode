@@ -79,10 +79,11 @@ export function CollabPopoverTrigger({
   };
 
   if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children as React.ReactElement<any>, {
+    const child = children as React.ReactElement<{ onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void }>;
+    return React.cloneElement(child as React.ReactElement<Record<string, unknown>>, {
       ref: triggerRef,
       onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
-        (children as any).props?.onClick?.(e);
+        child.props.onClick?.(e);
         handleClick(e);
       },
       'aria-expanded': open,
@@ -92,7 +93,7 @@ export function CollabPopoverTrigger({
 
   return (
     <button
-      ref={triggerRef as any}
+      ref={triggerRef as React.Ref<HTMLButtonElement>}
       type="button"
       onClick={handleClick}
       aria-expanded={open}

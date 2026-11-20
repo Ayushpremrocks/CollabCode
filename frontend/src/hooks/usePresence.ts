@@ -1,40 +1,27 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useWebSocket } from '../contexts/WebSocketContext';
 import type { UserPresence } from '../types';
 
-export function usePresence(roomCode: string) {
-  const { stompClient, connected: stompConnected, publish } = useWebSocket();
+/** Live list of users connected to the room. Only subscribes once the user has joined. */
+export function usePresence(roomCode: string, enabled: boolean) {
+  const { stompClient, connected, publish } = useWebSocket();
   const [activeUsers, setActiveUsers] = useState<UserPresence[]>([]);
 
   useEffect(() => {
-    if (!stompClient || !stompConnected || !roomCode) return;
+    if (!stompClient || !connected || !roomCode || !enabled) return;
 
-    // Subscribe to presence updates
-    const subscription = stompClient.subscribe(
-      `/topic/room/${roomCode}/presence`,
-      (message) => {
-        try {
-          const users: UserPresence[] = JSON.parse(message.body);
-          setActiveUsers(users);
-        } catch (e) {
-          console.error('[Presence] Failed to parse message:', e);
-        }
+    const subscription = stompClient.subscribe(`/topic/room/${roomCode}/presence`, (message) => {
+      try {
+        setActiveUsers(JSON.parse(message.body) as UserPresence[]);
+      } catch (e) {
+        console.error('[Presence] Failed to parse message:', e);
       }
-    );
-
-    // Announce join
+    });
+    // Ask the server to re-broadcast room state + presence now that we listen.
     publish(`/app/room/${roomCode}/join`, {});
 
-    return () => {
-      // Announce leave
-      publish(`/app/room/${roomCode}/leave`, {});
-      subscription.unsubscribe();
-    };
-  }, [stompClient, stompConnected, roomCode, publish]);
+    return () => subscription.unsubscribe();
+  }, [stompClient, connected, roomCode, enabled, publish]);
 
-  const refreshPresence = useCallback(() => {
-    publish(`/app/room/${roomCode}/join`, {});
-  }, [roomCode, publish]);
-
-  return { activeUsers, refreshPresence };
+  return { activeUsers };
 }

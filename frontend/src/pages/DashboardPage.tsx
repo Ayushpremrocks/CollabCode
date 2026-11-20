@@ -16,6 +16,13 @@ import {
 } from '../components/ui/CollabAlertDialog';
 import { CollabTooltip } from '../components/ui/CollabTooltip';
 import { toast } from '../components/ui/CollabToast';
+import { apiErrorMessage } from '../services/api';
+
+const FLASH_MESSAGES: Record<string, string> = {
+  deleted: 'That room was deleted by its host.',
+  'you-deleted': 'Room deleted.',
+  expired: 'That room expired after 48 hours of inactivity.',
+};
 
 function formatExpiry(expiresAt: string | null): { text: string; warning: boolean } {
   if (!expiresAt) return { text: '', warning: false };
@@ -73,38 +80,38 @@ export function DashboardPage() {
   const [error, setError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deletingCode, setDeletingCode] = useState<string | null>(null);
-  const [flashMessage, setFlashMessage] = useState('');
+  const [flashDismissed, setFlashDismissed] = useState<string | null>(null);
   const [creatingRoom, setCreatingRoom] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAuthenticated } = useAuth();
 
-  useEffect(() => {
-    // Check for ?msg= query param (from room deletion redirect)
-    const params = new URLSearchParams(location.search);
-    const msg = params.get('msg');
-    if (msg === 'deleted') {
-      setFlashMessage('Room was deleted by the host.');
-      setTimeout(() => setFlashMessage(''), 5000);
-    }
-  }, [location.search]);
+  const flashKey = new URLSearchParams(location.search).get('msg');
+  const flashMessage = flashKey && flashKey !== flashDismissed ? FLASH_MESSAGES[flashKey] ?? '' : '';
 
   useEffect(() => {
-    if (isAuthenticated) {
-      loadRooms();
-    }
+    if (!flashKey) return;
+    const timer = setTimeout(() => setFlashDismissed(flashKey), 6000);
+    return () => clearTimeout(timer);
+  }, [flashKey]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    roomService.getUserRooms()
+      .then((userRooms) => {
+        if (!cancelled) setRooms(userRooms);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(apiErrorMessage(err, 'Failed to load your rooms. Refresh to try again.'));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [isAuthenticated]);
-
-  const loadRooms = async () => {
-    try {
-      const userRooms = await roomService.getUserRooms();
-      setRooms(userRooms);
-    } catch (err) {
-      console.error('Failed to load rooms:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,9 +124,7 @@ export function DashboardPage() {
       setNewRoomName('');
       navigate(`/room/${room.roomCode}`);
     } catch (err: unknown) {
-      const error = err as { response?: { status?: number; data?: { error?: string } } };
-      console.error('[CreateRoom] Status:', error.response?.status, 'Data:', JSON.stringify(error.response?.data));
-      setError(error.response?.data?.error || `Failed to create room (HTTP ${error.response?.status ?? 'network error'})`);
+      setError(apiErrorMessage(err, 'Failed to create room'));
       setCreatingRoom(false);
     }
   };
@@ -134,8 +139,7 @@ export function DashboardPage() {
       setJoinCode('');
       navigate(`/room/${room.roomCode}`);
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { error?: string } } };
-      setError(error.response?.data?.error || 'Failed to join room');
+      setError(apiErrorMessage(err, 'Failed to join room'));
     }
   };
 
@@ -147,8 +151,7 @@ export function DashboardPage() {
       setDeleteConfirm(null);
       toast.success('Room deleted successfully');
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { error?: string } } };
-      const msg = error.response?.data?.error || 'Failed to delete room';
+      const msg = apiErrorMessage(err, 'Failed to delete room');
       setError(msg);
       toast.error(msg);
     } finally {
@@ -167,7 +170,7 @@ export function DashboardPage() {
         {flashMessage && (
           <div className="bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm px-4 py-3 rounded-lg mb-6 flex items-center justify-between">
             <span>{flashMessage}</span>
-            <button onClick={() => setFlashMessage('')} className="text-amber-400 hover:text-amber-300 ml-4">
+            <button type="button" onClick={() => setFlashDismissed(flashKey)} className="text-amber-400 hover:text-amber-300 ml-4">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>

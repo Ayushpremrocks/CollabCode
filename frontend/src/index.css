@@ -30,23 +30,23 @@
 html { color-scheme: dark; background: var(--cc-bg); }
 body { background: var(--cc-bg); color: var(--cc-text); font-family: var(--cc-font-ui); }
 
-/* Yjs Remote Cursor Styles (do NOT modify) */
+/* Remote cursors (y-monaco). Per-user colours + name labels are injected at runtime
+   by CollaborativeEditor as .yRemoteSelection-<clientID> / .yRemoteSelectionHead-<clientID>. */
 .yRemoteSelection { background-color: rgba(57,197,207,0.20); }
-.yRemoteSelectionHead { position: absolute; border-left: 2px solid var(--cc-accent); border-top: 2px solid var(--cc-accent); height: 100%; box-sizing: border-box; }
-.yRemoteSelection-0  { background-color: rgba(99,102,241,0.20); } .yRemoteSelectionHead-0 { border-color: #6366f1; }
-.yRemoteSelection-1  { background-color: rgba(57,197,207,0.20); } .yRemoteSelectionHead-1 { border-color: #39C5CF; }
-.yRemoteSelection-2  { background-color: rgba(63,185,80,0.20); }  .yRemoteSelectionHead-2 { border-color: #3FB950; }
-.yRemoteSelection-3  { background-color: rgba(248,81,73,0.20); }  .yRemoteSelectionHead-3 { border-color: #F85149; }
-.yRemoteSelection-4  { background-color: rgba(210,153,34,0.20); } .yRemoteSelectionHead-4 { border-color: #D29922; }
-.yRemoteSelection-5  { background-color: rgba(88,166,255,0.20); } .yRemoteSelectionHead-5 { border-color: #58A6FF; }
+.yRemoteSelectionHead {
+  position: absolute; height: 100%; box-sizing: border-box;
+  border-left: 2px solid var(--cc-accent);
+}
+.yRemoteSelectionHead::after {
+  position: absolute; top: -1.15em; left: -2px;
+  padding: 0 4px; border-radius: 3px 3px 3px 0;
+  font: 600 10px/1.4 var(--cc-font-ui); color: #0D1117;
+  white-space: nowrap; pointer-events: none; z-index: 10;
+}
 
-/* Line Authorship Gutter */
-.line-author-gutter { width: 3px !important; cursor: pointer; transition: width 0.15s ease; }
-.line-author-gutter:hover { width: 6px !important; }
-.line-author-0 { background-color: #6366f1; } .line-author-1 { background-color: #39C5CF; }
-.line-author-2 { background-color: #3FB950; } .line-author-3 { background-color: #F85149; }
-.line-author-4 { background-color: #D29922; } .line-author-5 { background-color: #58A6FF; }
-.line-author-6 { background-color: #f97316; } .line-author-7 { background-color: #a78bfa; }
+/* Line authorship: colour bar in the gutter (colours injected per author at runtime). */
+.cc-author-bar { width: 3px !important; margin-left: 3px; border-radius: 1px; opacity: 0.9; }
+.cc-author-inline { font-style: italic; font-size: 0.85em; opacity: 0.7; }
 
 /* Output Panel resize handle */
 .output-panel-resize-handle { cursor: row-resize; user-select: none; }

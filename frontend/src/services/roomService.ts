@@ -1,54 +1,44 @@
 import api from './api';
-import type { Room, CreateRoomRequest, JoinRoomRequest, SnapshotInfo } from '../types';
+import type { ChatMessage, CreateRoomRequest, JoinRoomRequest, Room, SnapshotInfo } from '../types';
 
 export const roomService = {
   async createRoom(data: CreateRoomRequest): Promise<Room> {
-    const response = await api.post<Room>('/rooms', data);
-    return response.data;
+    return (await api.post<Room>('/rooms', data)).data;
   },
 
+  /** Joins (or re-enters) a room. Must succeed before the WebSockets will accept us. */
   async joinRoom(data: JoinRoomRequest): Promise<Room> {
-    const response = await api.post<Room>('/rooms/join', data);
-    return response.data;
-  },
-
-  async getRoomByCode(roomCode: string): Promise<Room> {
-    const response = await api.get<Room>(`/rooms/${roomCode}`);
-    return response.data;
+    return (await api.post<Room>('/rooms/join', data)).data;
   },
 
   async getUserRooms(): Promise<Room[]> {
-    const response = await api.get<Room[]>('/rooms');
-    return response.data;
+    return (await api.get<Room[]>('/rooms')).data;
   },
 
-  /** Feature 2: Delete a room (host only) */
+  /** Host only. */
   async deleteRoom(roomCode: string): Promise<void> {
     await api.delete(`/rooms/${roomCode}`);
   },
 
-  /** Lock/Unlock a room (host only) */
-  async toggleLock(roomCode: string, locked: boolean): Promise<{ locked: boolean }> {
-    const response = await api.patch<{ locked: boolean }>(`/rooms/${roomCode}/lock`, { locked });
-    return response.data;
+  /** Host only: a locked room cannot be joined by new users. */
+  async setLocked(roomCode: string, locked: boolean): Promise<{ locked: boolean }> {
+    return (await api.patch<{ locked: boolean }>(`/rooms/${roomCode}/lock`, { locked })).data;
   },
 
-  /** Feature 8: Get snapshot history */
+  /** Host only: when read-only, only the host can edit (enforced by the server). */
+  async setReadOnly(roomCode: string, readOnly: boolean): Promise<{ readOnly: boolean }> {
+    return (await api.patch<{ readOnly: boolean }>(`/rooms/${roomCode}/read-only`, { readOnly })).data;
+  },
+
   async getSnapshots(roomCode: string): Promise<SnapshotInfo[]> {
-    const response = await api.get<SnapshotInfo[]>(`/rooms/${roomCode}/snapshots`);
-    return response.data;
+    return (await api.get<SnapshotInfo[]>(`/rooms/${roomCode}/snapshots`)).data;
   },
 
-  /** Feature 8: Get snapshot document data for preview */
   async getSnapshotData(roomCode: string, snapshotId: number): Promise<{ data: string; language: string }> {
-    const response = await api.get<{ data: string; language: string }>(
-      `/rooms/${roomCode}/snapshots/${snapshotId}`
-    );
-    return response.data;
+    return (await api.get<{ data: string; language: string }>(`/rooms/${roomCode}/snapshots/${snapshotId}`)).data;
   },
 
-  /** Feature 8: Restore a snapshot (host only) */
-  async restoreSnapshot(roomCode: string, snapshotId: number): Promise<void> {
-    await api.post(`/rooms/${roomCode}/snapshots/${snapshotId}/restore`);
+  async getChatHistory(roomCode: string): Promise<ChatMessage[]> {
+    return (await api.get<ChatMessage[]>(`/rooms/${roomCode}/chat`)).data;
   },
 };
