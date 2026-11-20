@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
+import { EditorToolbar } from '../components/EditorToolbar';
 import { CollaborativeEditor } from '../components/CollaborativeEditor';
 import { ActiveUsersPanel } from '../components/ActiveUsersPanel';
-import { RoomControls } from '../components/RoomControls';
 import { OutputPanel } from '../components/OutputPanel';
 import { ChatPanel } from '../components/ChatPanel';
 import { AgentPanel } from '../components/AgentPanel';
 import { AgentDebugPanel } from '../components/AgentDebugPanel';
 import { HistoryModal } from '../components/HistoryModal';
+import { Icon, type IconName } from '../components/ui/icons';
 import { toast } from '../components/ui/CollabToast';
 import { useCollaboration } from '../hooks/useCollaboration';
 import { usePresence } from '../hooks/usePresence';
@@ -33,6 +34,16 @@ import {
 const FONT_SIZE_KEY = 'collabcode-font-size';
 const AUTHOR_NAMES_KEY = 'collabcode-show-authors';
 const EXPIRY_WARNING_MS = 3600 * 1000;
+
+type SideTab = 'people' | 'chat' | 'ask' | 'debug';
+type IoTab = 'input' | 'output';
+
+const SIDE_TABS: { id: SideTab; label: string; icon: IconName; color: string }[] = [
+  { id: 'people', label: 'People', icon: 'users', color: 'var(--cc-cyan)' },
+  { id: 'chat', label: 'Chat', icon: 'chat', color: 'var(--cc-accent)' },
+  { id: 'ask', label: 'Ask AI', icon: 'sparkles', color: 'var(--cc-violet)' },
+  { id: 'debug', label: 'Debug', icon: 'bug', color: 'var(--cc-pink)' },
+];
 
 function readStorage(key: string): string | null {
   try {
@@ -59,6 +70,25 @@ function parseJson<T>(body: string): T | null {
   }
 }
 
+function Banner({ tone, icon, children }: { tone: 'warning' | 'error'; icon: IconName; children: ReactNode }) {
+  const color = tone === 'warning' ? 'var(--cc-warning)' : 'var(--cc-error)';
+  const bg = tone === 'warning' ? 'var(--cc-warning-dim)' : 'var(--cc-error-dim)';
+  return (
+    <div className="shrink-0 flex items-center gap-2 px-4 py-1.5 text-xs font-medium" style={{ color, background: bg }}>
+      <Icon name={icon} size={13} /> {children}
+    </div>
+  );
+}
+
+function CenteredState({ children }: { children: ReactNode }) {
+  return (
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--cc-bg)' }}>
+      <Navbar />
+      <div className="flex-1 flex items-center justify-center p-6">{children}</div>
+    </div>
+  );
+}
+
 export function EditorPage() {
   const { roomCode: rawRoomCode } = useParams<{ roomCode: string }>();
   const roomCode = (rawRoomCode ?? '').toUpperCase();
@@ -73,23 +103,22 @@ export function EditorPage() {
   const [isRoomLocked, setIsRoomLocked] = useState(false);
   const [expiringSoon, setExpiringSoon] = useState(false);
 
-  const [showOutput, setShowOutput] = useState(false);
+  const [ioOpen, setIoOpen] = useState(false);
+  const [ioTab, setIoTab] = useState<IoTab>('input');
   const [execResult, setExecResult] = useState<ExecuteCodeResponse | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   // stdin is per user on purpose: each person runs the program with their own input.
   const [stdin, setStdin] = useState('');
 
+  const [sideTab, setSideTab] = useState<SideTab>('people');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatCollapsed, setChatCollapsed] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
-  const chatCollapsedRef = useRef(chatCollapsed);
+  const sideTabRef = useRef(sideTab);
   useEffect(() => {
-    chatCollapsedRef.current = chatCollapsed;
-  }, [chatCollapsed]);
+    sideTabRef.current = sideTab;
+  }, [sideTab]);
 
   const [showHistory, setShowHistory] = useState(false);
-  const [agentCollapsed, setAgentCollapsed] = useState(true);
-  const [debugCollapsed, setDebugCollapsed] = useState(false);
   const [fontSize, setFontSize] = useState<number>(() => Number.parseInt(readStorage(FONT_SIZE_KEY) ?? '', 10) || 14);
   const [showAuthorNames, setShowAuthorNames] = useState(() => readStorage(AUTHOR_NAMES_KEY) === 'true');
 
@@ -197,7 +226,7 @@ export function EditorPage() {
         const data = parseJson<ChatMessage>(m.body);
         if (!data) return;
         setChatMessages((prev) => [...prev, data]);
-        if (chatCollapsedRef.current) setUnreadCount((c) => c + 1);
+        if (sideTabRef.current !== 'chat') setUnreadCount((c) => c + 1);
       }),
       stompClient.subscribe(topic('room-deleted'), (m) => {
         const data = parseJson<RoomDeletedEvent>(m.body);
@@ -217,7 +246,7 @@ export function EditorPage() {
     try {
       const result = await roomService.setReadOnly(roomCode, !isReadOnly);
       setIsReadOnly(result.readOnly);
-      toast.info(result.readOnly ? 'Host-only editing: collaborators can now only watch' : 'Everyone can edit again');
+      toast.info(result.readOnly ? 'Host-only editing is on — others can watch' : 'Everyone can edit again');
     } catch (err) {
       toast.error(apiErrorMessage(err, 'Failed to change editing mode'));
     }
@@ -227,7 +256,7 @@ export function EditorPage() {
     try {
       const result = await roomService.setLocked(roomCode, !isRoomLocked);
       setIsRoomLocked(result.locked);
-      toast.info(result.locked ? 'Room locked — new users cannot join' : 'Room unlocked');
+      toast.info(result.locked ? 'Room locked — new people cannot join' : 'Room unlocked');
     } catch (err) {
       toast.error(apiErrorMessage(err, 'Failed to toggle room lock'));
     }
@@ -244,7 +273,8 @@ export function EditorPage() {
 
   const handleRunCode = useCallback(async () => {
     setIsRunning(true);
-    setShowOutput(true);
+    setIoOpen(true);
+    setIoTab('output');
     setExecResult(null);
     try {
       setExecResult(await executionService.executeCode({ code: getCode(), language, stdin }));
@@ -276,10 +306,10 @@ export function EditorPage() {
     });
   }, [roomCode, publish, user]);
 
-  const handleChatToggle = useCallback(() => {
-    if (chatCollapsed) setUnreadCount(0);
-    setChatCollapsed(!chatCollapsed);
-  }, [chatCollapsed]);
+  const selectSideTab = useCallback((tab: SideTab) => {
+    setSideTab(tab);
+    if (tab === 'chat') setUnreadCount(0);
+  }, []);
 
   const handleFontSizeChange = useCallback((size: number) => {
     setFontSize(size);
@@ -304,56 +334,71 @@ export function EditorPage() {
   // ── Render ───────────────────────────────────────────────────────────────
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-950">
-        <Navbar />
-        <div className="flex items-center justify-center h-[calc(100vh-56px)]">
-          <div className="text-center">
-            <p className="text-red-400 mb-4">{error}</p>
-            <button type="button" onClick={() => navigate('/dashboard')} className="text-indigo-400 hover:text-indigo-300 text-sm transition-colors">
-              ← Back to Dashboard
-            </button>
-          </div>
+      <CenteredState>
+        <div className="cc-card p-8 text-center max-w-sm">
+          <span className="cc-tile mx-auto mb-3" style={{ ['--tile' as string]: 'var(--cc-error)' }}><Icon name="x" size={18} /></span>
+          <p className="text-sm font-medium mb-1" style={{ color: 'var(--cc-text)' }}>Can't open this room</p>
+          <p className="text-xs mb-5" style={{ color: 'var(--cc-text-muted)' }}>{error}</p>
+          <button type="button" className="cc-btn cc-btn-soft" onClick={() => navigate('/dashboard')}>Back to dashboard</button>
         </div>
-      </div>
+      </CenteredState>
     );
   }
 
   if (!room) {
     return (
-      <div className="min-h-screen bg-gray-950">
-        <Navbar />
-        <div className="flex items-center justify-center h-[calc(100vh-56px)]">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-gray-400 text-sm">Loading room...</p>
-          </div>
+      <CenteredState>
+        <div className="flex flex-col items-center gap-3">
+          <span className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--cc-accent)', borderTopColor: 'transparent' }} />
+          <p className="text-sm" style={{ color: 'var(--cc-text-muted)' }}>Joining room…</p>
         </div>
-      </div>
+      </CenteredState>
     );
   }
 
-  const banner = (tone: 'amber' | 'red', text: string) => (
-    <div className={`${tone === 'amber' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-red-500/10 border-red-500/20 text-red-400'} border-b px-4 py-1.5 text-xs font-medium shrink-0`}>
-      {text}
-    </div>
-  );
-
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-gray-950">
-      <Navbar />
+    <div className="h-screen flex flex-col overflow-hidden" style={{ background: 'var(--cc-bg)' }}>
+      <Navbar>
+        <EditorToolbar
+          roomName={room.name}
+          roomCode={roomCode}
+          status={status}
+          synced={synced}
+          language={language}
+          canEdit={canEdit}
+          isHost={isHost}
+          isReadOnly={isReadOnly}
+          isRoomLocked={isRoomLocked}
+          isRunning={isRunning}
+          showAuthorNames={showAuthorNames}
+          fontSize={fontSize}
+          onLanguageChange={handleLanguageChange}
+          onRun={handleRunCode}
+          onToggleAuthorNames={handleToggleAuthorNames}
+          onShowHistory={() => setShowHistory(true)}
+          onDownload={handleDownload}
+          onFontSizeChange={handleFontSizeChange}
+          onLeave={() => navigate('/dashboard')}
+          onToggleReadOnly={handleToggleReadOnly}
+          onToggleRoomLock={handleToggleRoomLock}
+          onDeleteRoom={handleDeleteRoom}
+        />
+      </Navbar>
 
-      {expiringSoon && banner('amber', '⚠️ This room expires in less than 1 hour. Download your code to keep it.')}
-      {isReadOnly && (isHost
-        ? banner('amber', '🔒 Host-only editing is on — collaborators can watch but not edit.')
-        : banner('amber', '🔒 The host has enabled host-only editing — you can watch but not edit.'))}
-      {isRoomLocked && banner('amber', '🔐 This room is locked — new users cannot join.')}
-      {status === 'forbidden' && banner('red', 'You no longer have access to this room.')}
-      {status === 'unauthorized' && banner('red', 'Your session could not be verified. Please sign out and sign in again.')}
+      {expiringSoon && <Banner tone="warning" icon="clock">This room expires in less than an hour — download your code to keep it.</Banner>}
+      {isReadOnly && (
+        <Banner tone="warning" icon="eye">
+          {isHost ? 'Host-only editing is on — collaborators can watch but not edit.' : 'The host turned on host-only editing — you can watch but not edit.'}
+        </Banner>
+      )}
+      {isRoomLocked && <Banner tone="warning" icon="lock">This room is locked — new people can't join.</Banner>}
+      {status === 'forbidden' && <Banner tone="error" icon="x">You no longer have access to this room.</Banner>}
+      {status === 'unauthorized' && <Banner tone="error" icon="x">Your session couldn't be verified. Please sign out and sign in again.</Banner>}
 
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
-        {/* Left column: editor, stdin, output */}
-        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
-          <div className="flex-1 p-2 min-h-0 overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row min-h-0">
+        {/* Editor + input/output */}
+        <section className="flex-1 flex flex-col min-w-0 min-h-0">
+          <div className="flex-1 min-h-0 p-2 pb-0">
             <CollaborativeEditor
               yText={yText}
               authors={authors}
@@ -361,84 +406,93 @@ export function EditorPage() {
               language={language}
               readOnly={!canEdit || !synced}
               fontSize={fontSize}
-              theme="vs-dark"
               showAuthorNames={showAuthorNames}
             />
           </div>
 
-          <div className="shrink-0 border-t border-gray-800 bg-gray-900/50 px-3 py-2">
-            <label htmlFor="stdin-input" className="text-[11px] font-semibold uppercase tracking-wide block mb-1 text-gray-500">
-              Standard Input
-            </label>
-            <textarea
-              id="stdin-input"
-              value={stdin}
-              onChange={(e) => setStdin(e.target.value)}
-              placeholder="Type program input here before running… (e.g. 10 20)"
-              rows={2}
-              className="w-full text-xs font-mono rounded border px-2.5 py-1.5 resize-none focus:outline-none transition-colors bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-600 focus:border-indigo-500"
-              style={{ minHeight: '44px', maxHeight: '100px' }}
-            />
+          <div className="shrink-0 m-2 cc-card overflow-hidden flex flex-col" style={{ height: ioOpen ? 220 : 40 }}>
+            <div className="flex items-center h-10 px-1 border-b shrink-0" style={{ borderColor: ioOpen ? 'var(--cc-border)' : 'transparent' }}>
+              {(['input', 'output'] as IoTab[]).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={ioOpen && ioTab === tab}
+                  className="cc-tab"
+                  style={{ ['--tab-color' as string]: tab === 'output' ? 'var(--cc-success)' : 'var(--cc-accent)' }}
+                  onClick={() => {
+                    setIoTab(tab);
+                    setIoOpen(true);
+                  }}
+                >
+                  <Icon name={tab === 'input' ? 'pen' : 'terminal'} size={13} />
+                  {tab === 'input' ? 'Input' : 'Output'}
+                  {tab === 'output' && execResult && !isRunning && (
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: execResult.statusId === 3 ? 'var(--cc-success)' : 'var(--cc-error)' }} />
+                  )}
+                </button>
+              ))}
+              <button type="button" className="cc-icon-btn ml-auto" onClick={() => setIoOpen((o) => !o)} aria-label={ioOpen ? 'Collapse panel' : 'Expand panel'}>
+                <Icon name="chevronDown" size={14} style={{ transform: ioOpen ? undefined : 'rotate(180deg)' }} />
+              </button>
+            </div>
+            {ioOpen && (
+              <div className="flex-1 min-h-0 overflow-auto p-3">
+                {ioTab === 'input' ? (
+                  <textarea
+                    className="cc-input font-code text-xs h-full"
+                    value={stdin}
+                    onChange={(e) => setStdin(e.target.value)}
+                    placeholder="Program input (stdin) — only used for your runs, not shared."
+                    aria-label="Program input"
+                  />
+                ) : (
+                  <OutputPanel result={execResult} isRunning={isRunning} />
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Sidebar */}
+        <aside className="w-full lg:w-80 xl:w-[22rem] shrink-0 flex flex-col min-h-0 max-h-[45vh] lg:max-h-none border-t lg:border-t-0 lg:border-l" style={{ borderColor: 'var(--cc-border)', background: 'var(--cc-surface)' }}>
+          <div role="tablist" className="flex items-center px-1 border-b shrink-0" style={{ borderColor: 'var(--cc-border)' }}>
+            {SIDE_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={sideTab === tab.id}
+                className="cc-tab flex-1 justify-center"
+                style={{ ['--tab-color' as string]: tab.color }}
+                onClick={() => selectSideTab(tab.id)}
+              >
+                <Icon name={tab.icon} size={14} style={sideTab === tab.id ? { color: tab.color } : undefined} />
+                <span className="hidden sm:inline">{tab.label}</span>
+                {tab.id === 'people' && activeUsers.length > 0 && <span className="text-[10px]" style={{ color: 'var(--cc-text-muted)' }}>{activeUsers.length}</span>}
+                {tab.id === 'chat' && unreadCount > 0 && (
+                  <span className="min-w-4 h-4 px-1 rounded-full text-[10px] font-semibold inline-flex items-center justify-center" style={{ background: 'var(--cc-accent)', color: '#0B0E14' }}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
 
-          {showOutput && <OutputPanel result={execResult} isRunning={isRunning} onClose={() => setShowOutput(false)} />}
-        </div>
-
-        {/* Right sidebar */}
-        <div className="w-full lg:w-64 xl:w-72 shrink-0 lg:h-full max-h-[45vh] lg:max-h-none border-t lg:border-t-0 lg:border-l border-gray-800 overflow-y-auto overflow-x-hidden min-h-0">
-          <div className="flex flex-col gap-2.5 p-2.5">
-            <RoomControls
-              roomCode={roomCode}
-              roomName={room.name}
-              language={language}
-              connected={status === 'connected' && synced}
-              isHost={isHost}
-              isReadOnly={isReadOnly}
-              isRoomLocked={isRoomLocked}
-              fontSize={fontSize}
-              canEdit={canEdit}
-              showAuthorNames={showAuthorNames}
-              onToggleAuthorNames={handleToggleAuthorNames}
-              onLanguageChange={handleLanguageChange}
-              onLeaveRoom={() => navigate('/dashboard')}
-              onToggleReadOnly={handleToggleReadOnly}
-              onToggleRoomLock={handleToggleRoomLock}
-              onDeleteRoom={handleDeleteRoom}
-              onRunCode={handleRunCode}
-              onDownload={handleDownload}
-              onShowHistory={() => setShowHistory(true)}
-              onFontSizeChange={handleFontSizeChange}
-              isRunning={isRunning}
-            />
-
+          {/* All tabs stay mounted so an AI run or a chat draft survives switching tabs. */}
+          <div className="flex-1 min-h-0 overflow-y-auto" hidden={sideTab !== 'people'}>
             <ActiveUsersPanel users={activeUsers} currentUsername={user?.username ?? ''} ownerUsername={room.ownerUsername} />
-
-            <ChatPanel
-              messages={chatMessages}
-              currentUsername={user?.username ?? ''}
-              onSend={handleSendChat}
-              isCollapsed={chatCollapsed}
-              onToggle={handleChatToggle}
-              unreadCount={unreadCount}
-            />
-
-            <AgentPanel
-              getCode={getCode}
-              currentLanguage={language}
-              isCollapsed={agentCollapsed}
-              onToggle={() => setAgentCollapsed((prev) => !prev)}
-            />
-
-            <AgentDebugPanel
-              yText={yText}
-              getCode={getCode}
-              currentLanguage={language}
-              canEdit={canEdit && synced}
-              isCollapsed={debugCollapsed}
-              onToggle={() => setDebugCollapsed((prev) => !prev)}
-            />
           </div>
-        </div>
+          <div className="flex-1 min-h-0" hidden={sideTab !== 'chat'}>
+            <ChatPanel messages={chatMessages} currentUsername={user?.username ?? ''} onSend={handleSendChat} />
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto" hidden={sideTab !== 'ask'}>
+            <AgentPanel getCode={getCode} currentLanguage={language} />
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto" hidden={sideTab !== 'debug'}>
+            <AgentDebugPanel yText={yText} getCode={getCode} currentLanguage={language} canEdit={canEdit && synced} />
+          </div>
+        </aside>
       </div>
 
       {showHistory && (

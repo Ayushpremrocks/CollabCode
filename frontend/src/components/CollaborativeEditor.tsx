@@ -21,7 +21,7 @@ interface CollaborativeEditorProps {
   language: SupportedLanguage;
   readOnly: boolean;
   fontSize?: number;
-  theme?: 'vs-dark' | 'vs';
+  theme?: string;
   /** Show the author's name at the start of each block of lines they wrote. */
   showAuthorNames?: boolean;
 }
@@ -55,7 +55,7 @@ export function CollaborativeEditor({
   language,
   readOnly,
   fontSize = 14,
-  theme = 'vs-dark',
+  theme = 'collab-dark',
   showAuthorNames = false,
 }: CollaborativeEditorProps) {
   const [editor, setEditor] = useState<MonacoEditor | null>(null);
@@ -145,6 +145,8 @@ export function CollaborativeEditor({
           decorations.push({
             range: new monaco.Range(line, end, line, end),
             options: {
+              // Empty range: Monaco only renders it with showIfCollapsed.
+              showIfCollapsed: true,
               after: { content: `   ${label}`, inlineClassName: `cc-author-inline cc-author-text-${colorKey}` },
             },
           });
@@ -186,7 +188,7 @@ export function CollaborativeEditor({
   }, [editor, readOnly, fontSize]);
 
   return (
-    <div className="h-full w-full rounded-lg overflow-hidden border border-gray-800">
+    <div className="h-full w-full overflow-hidden" style={{ borderRadius: 'var(--cc-radius)', border: '1px solid var(--cc-border)', background: '#0E1219' }}>
       <Editor
         height="100%"
         defaultLanguage={LANGUAGE_CONFIG[language].monacoId}

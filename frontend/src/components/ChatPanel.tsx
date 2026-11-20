@@ -1,15 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import type { ChatMessage } from '../types';
-import { getUserColor } from '../types';
-import { CollabTooltip } from './ui/CollabTooltip';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { getUserColor, type ChatMessage } from '../types';
+import { Avatar } from './Navbar';
+import { Icon } from './ui/icons';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
+  /** Backend username of the signed-in user, to align their own messages. */
   currentUsername: string;
   onSend: (message: string) => void;
-  isCollapsed: boolean;
-  onToggle: () => void;
-  unreadCount: number;
 }
 
 function formatTime(timestamp: string): string {
@@ -20,22 +18,13 @@ function formatTime(timestamp: string): string {
   }
 }
 
-export function ChatPanel({
-  messages,
-  currentUsername,
-  onSend,
-  isCollapsed,
-  onToggle,
-  unreadCount,
-}: ChatPanelProps) {
+export function ChatPanel({ messages, currentUsername, onSend }: ChatPanelProps) {
   const [inputValue, setInputValue] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isCollapsed) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, isCollapsed]);
+    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const handleSend = useCallback(() => {
     const trimmed = inputValue.trim();
@@ -44,136 +33,63 @@ export function ChatPanel({
     setInputValue('');
   }, [inputValue, onSend]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  if (isCollapsed) {
-    return (
-      <CollabTooltip content="Open chat" side="left">
-        <button
-          type="button"
-          onClick={onToggle}
-          className="flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 hover:border-gray-700 hover:bg-gray-800/50 transition-all relative cursor-pointer"
-          aria-label="Open chat"
-        >
-          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-          <span className="text-xs text-gray-400 font-medium">Chat</span>
-          {unreadCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 bg-indigo-500 text-white text-xs font-bold w-4 h-4 rounded-full flex items-center justify-center">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
-        </button>
-      </CollabTooltip>
-    );
-  }
-
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col" style={{ height: '320px' }}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-800 shrink-0">
-        <div className="flex items-center gap-2">
-          <svg className="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-          <span className="text-xs font-semibold text-gray-300">Chat</span>
-        </div>
-        <CollabTooltip content="Collapse chat" side="left">
-          <button
-            type="button"
-            onClick={onToggle}
-            className="text-gray-400 hover:text-white p-1 hover:bg-gray-800 rounded transition-colors cursor-pointer"
-            aria-label="Collapse chat"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-        </CollabTooltip>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+    <div className="flex flex-col h-full min-h-0">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
         {messages.length === 0 ? (
-          <p className="text-xs text-gray-600 text-center py-4">
-            No messages yet. Start the conversation!
-          </p>
+          <div className="text-center pt-10">
+            <span className="cc-tile mx-auto mb-2" style={{ ['--tile' as string]: 'var(--cc-cyan)' }}><Icon name="chat" size={18} /></span>
+            <p className="text-xs" style={{ color: 'var(--cc-text-muted)' }}>No messages yet — say hi 👋</p>
+          </div>
         ) : (
           messages.map((msg, i) => {
             const isOwn = msg.username === currentUsername;
             const color = getUserColor(msg.username);
-            const displayName = msg.name || msg.username;
-
+            const name = msg.name || 'Collaborator';
+            const grouped = i > 0 && messages[i - 1].username === msg.username;
             return (
-              <div key={i} className={`chat-message-enter flex gap-2 ${isOwn ? 'flex-row-reverse' : ''}`}>
-                {/* Avatar */}
-                {msg.imageUrl ? (
-                  <img
-                    src={msg.imageUrl}
-                    alt={displayName}
-                    className="w-6 h-6 rounded-full shrink-0 mt-0.5 object-cover"
-                  />
-                ) : (
-                  <div
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0 mt-0.5"
-                    style={{ backgroundColor: color }}
-                  >
-                    {displayName.charAt(0).toUpperCase()}
-                  </div>
-                )}
-
-                {/* Bubble */}
-                <div className={`max-w-[75%] ${isOwn ? 'items-end' : 'items-start'} flex flex-col gap-0.5`}>
-                  {!isOwn && (
-                    <span className="text-[10px] font-medium" style={{ color }}>
-                      {displayName}
+              <div key={`${msg.timestamp}-${i}`} className={`chat-message-enter flex gap-2 ${isOwn ? 'flex-row-reverse' : ''} ${grouped ? '-mt-2' : ''}`}>
+                <div className="w-6 shrink-0">{!grouped && <Avatar name={name} imageUrl={msg.imageUrl} color={color} size={24} />}</div>
+                <div className={`max-w-[80%] flex flex-col gap-0.5 ${isOwn ? 'items-end' : 'items-start'}`}>
+                  {!grouped && (
+                    <span className="text-[10px] font-medium" style={{ color: isOwn ? 'var(--cc-text-muted)' : color }}>
+                      {isOwn ? 'You' : name} · {formatTime(msg.timestamp)}
                     </span>
                   )}
                   <div
-                    className={`px-2.5 py-1 rounded-xl text-xs leading-relaxed break-words ${
-                      isOwn
-                        ? 'bg-indigo-600 text-white rounded-tr-sm'
-                        : 'bg-gray-800 text-gray-200 rounded-tl-sm'
-                    }`}
+                    className="px-3 py-1.5 text-xs leading-relaxed break-words rounded-2xl"
+                    style={isOwn
+                      ? { background: 'var(--cc-accent)', color: '#0B0E14', borderTopRightRadius: 6 }
+                      : { background: 'var(--cc-surface-el)', color: 'var(--cc-text)', borderTopLeftRadius: 6 }}
                   >
                     {msg.message}
                   </div>
-                  <span className="text-[10px] text-gray-600">{formatTime(msg.timestamp)}</span>
                 </div>
               </div>
             );
           })
         )}
-        <div ref={messagesEndRef} />
+        <div ref={endRef} />
       </div>
 
-      {/* Input */}
-      <div className="px-3 py-2.5 border-t border-gray-800 flex gap-2 items-end shrink-0">
+      <div className="p-3 border-t flex gap-2 items-end shrink-0" style={{ borderColor: 'var(--cc-border)' }}>
         <textarea
+          className="cc-input text-xs"
           value={inputValue}
-          onChange={e => setInputValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Message... (Enter to send)"
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          placeholder="Message the room…"
           rows={1}
-          className="flex-1 bg-gray-800 border border-gray-700 text-gray-200 text-xs px-3 py-1.5 rounded-lg resize-none focus:border-indigo-500 focus:outline-none placeholder-gray-600 transition-colors"
-          style={{ minHeight: '34px', maxHeight: '80px' }}
+          maxLength={1000}
+          style={{ minHeight: 36, maxHeight: 96 }}
         />
-        <button
-          onClick={handleSend}
-          disabled={!inputValue.trim()}
-          className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-colors shrink-0"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-          </svg>
+        <button type="button" className="cc-btn cc-btn-primary px-2.5" onClick={handleSend} disabled={!inputValue.trim()} aria-label="Send message">
+          <Icon name="send" size={15} />
         </button>
       </div>
     </div>

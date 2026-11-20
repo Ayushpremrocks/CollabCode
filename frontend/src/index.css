@@ -1,71 +1,181 @@
 ﻿@import "tailwindcss";
 
-/* ======================================
-   CollabCode Design Tokens — Dark Only
-   ====================================== */
+/* ======================================================================
+   CollabCode design system — dark, clean, with a few clear colours.
+   Neutral surfaces; colour is reserved for meaning:
+     indigo  = brand / primary actions     cyan    = collaboration
+     violet  = AI                          emerald = run / success
+     amber   = warnings / host controls    rose    = destructive
+   ====================================================================== */
 :root {
-  --cc-bg:            #0D1117;
-  --cc-surface:       #151A21;
-  --cc-surface-el:    #1B222C;
-  --cc-surface-hover: #1F2733;
-  --cc-border:        #252C35;
-  --cc-border-subtle: #1D2330;
-  --cc-text:          #E6EDF3;
-  --cc-text-sec:      #8B949E;
-  --cc-text-muted:    #6E7681;
-  --cc-accent:        #39C5CF;
-  --cc-accent-hover:  #2EABB5;
-  --cc-accent-dim:    rgba(57,197,207,0.12);
-  --cc-success:       #3FB950;
-  --cc-success-dim:   rgba(63,185,80,0.12);
-  --cc-warning:       #D29922;
-  --cc-warning-dim:   rgba(210,153,34,0.12);
-  --cc-error:         #F85149;
-  --cc-error-dim:     rgba(248,81,73,0.12);
-  --cc-info:          #58A6FF;
+  --cc-bg:            #0B0E14;
+  --cc-surface:       #11151D;
+  --cc-surface-el:    #171C26;
+  --cc-surface-hover: #1D2330;
+  --cc-border:        #232938;
+  --cc-border-subtle: #1A1F2B;
+  --cc-text:          #E7EAF1;
+  --cc-text-sec:      #A3AABB;
+  --cc-text-muted:    #6C7386;
+
+  --cc-accent:        #8B9CFF;   /* light indigo: readable with dark text on top */
+  --cc-accent-hover:  #A3B0FF;
+  --cc-accent-dim:    rgba(139,156,255,0.14);
+
+  --cc-cyan:          #22D3EE;
+  --cc-cyan-dim:      rgba(34,211,238,0.12);
+  --cc-violet:        #A78BFA;
+  --cc-violet-dim:    rgba(167,139,250,0.14);
+  --cc-pink:          #F472B6;
+
+  --cc-success:       #34D399;
+  --cc-success-dim:   rgba(52,211,153,0.13);
+  --cc-warning:       #FBBF24;
+  --cc-warning-dim:   rgba(251,191,36,0.12);
+  --cc-error:         #FB7185;
+  --cc-error-dim:     rgba(251,113,133,0.13);
+  --cc-info:          #60A5FA;
+
+  --cc-gradient: linear-gradient(120deg, #22D3EE 0%, #8B9CFF 45%, #F472B6 100%);
+  --cc-radius: 12px;
   --cc-font-ui:   'Inter', system-ui, -apple-system, sans-serif;
   --cc-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 html { color-scheme: dark; background: var(--cc-bg); }
-body { background: var(--cc-bg); color: var(--cc-text); font-family: var(--cc-font-ui); }
+body {
+  background: var(--cc-bg);
+  color: var(--cc-text);
+  font-family: var(--cc-font-ui);
+  -webkit-font-smoothing: antialiased;
+}
 
-/* Remote cursors (y-monaco). Per-user colours + name labels are injected at runtime
-   by CollaborativeEditor as .yRemoteSelection-<clientID> / .yRemoteSelectionHead-<clientID>. */
-.yRemoteSelection { background-color: rgba(57,197,207,0.20); }
+/* ── Building blocks ───────────────────────────────────────────────── */
+@layer components {
+  .cc-card {
+    background: var(--cc-surface);
+    border: 1px solid var(--cc-border);
+    border-radius: var(--cc-radius);
+  }
+
+  .cc-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem;
+    height: 2.25rem; padding: 0 0.9rem; border-radius: 10px;
+    font-size: 0.8125rem; font-weight: 500; white-space: nowrap;
+    border: 1px solid transparent; cursor: pointer;
+    transition: background-color .15s, border-color .15s, color .15s, opacity .15s;
+  }
+  .cc-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .cc-btn-sm { height: 1.9rem; padding: 0 0.65rem; font-size: 0.75rem; border-radius: 8px; }
+  .cc-btn-primary { background: var(--cc-accent); color: #0B0E14; }
+  .cc-btn-primary:hover:not(:disabled) { background: var(--cc-accent-hover); }
+  .cc-btn-run { background: var(--cc-success); color: #052016; }
+  .cc-btn-run:hover:not(:disabled) { filter: brightness(1.08); }
+  .cc-btn-soft { background: var(--cc-surface-el); border-color: var(--cc-border); color: var(--cc-text-sec); }
+  .cc-btn-soft:hover:not(:disabled) { background: var(--cc-surface-hover); color: var(--cc-text); }
+  .cc-btn-ghost { background: transparent; color: var(--cc-text-sec); }
+  .cc-btn-ghost:hover:not(:disabled) { background: var(--cc-surface-el); color: var(--cc-text); }
+  .cc-btn-danger { background: var(--cc-error-dim); color: var(--cc-error); border-color: rgba(251,113,133,.25); }
+  .cc-btn-danger:hover:not(:disabled) { background: rgba(251,113,133,.2); }
+
+  .cc-icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 2rem; height: 2rem; border-radius: 8px;
+    color: var(--cc-text-muted); cursor: pointer; transition: background-color .15s, color .15s;
+  }
+  .cc-icon-btn:hover { background: var(--cc-surface-el); color: var(--cc-text); }
+  .cc-icon-btn[aria-pressed="true"] { background: var(--cc-accent-dim); color: var(--cc-accent); }
+
+  .cc-input {
+    width: 100%; height: 2.25rem; padding: 0 0.8rem; border-radius: 10px;
+    background: var(--cc-surface-el); border: 1px solid var(--cc-border);
+    color: var(--cc-text); font-size: 0.8125rem; outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .cc-input::placeholder { color: var(--cc-text-muted); }
+  .cc-input:focus { border-color: var(--cc-accent); box-shadow: 0 0 0 3px var(--cc-accent-dim); }
+  textarea.cc-input { height: auto; padding: 0.55rem 0.8rem; resize: none; line-height: 1.5; }
+
+  .cc-chip {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    padding: 0.1rem 0.5rem; border-radius: 999px;
+    font-size: 0.6875rem; font-weight: 500; line-height: 1.4;
+    background: var(--cc-surface-el); color: var(--cc-text-sec); border: 1px solid var(--cc-border);
+  }
+
+  .cc-label {
+    font-size: 0.6875rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--cc-text-muted);
+  }
+
+  .cc-gradient-text {
+    background: var(--cc-gradient);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+
+  /* Coloured square behind an icon; set --tile to a colour */
+  .cc-tile {
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 2.25rem; height: 2.25rem; border-radius: 10px;
+    color: var(--tile, var(--cc-accent));
+    background: color-mix(in srgb, var(--tile, var(--cc-accent)) 14%, transparent);
+  }
+
+  .cc-tab {
+    position: relative; display: inline-flex; align-items: center; gap: 0.35rem;
+    height: 2.4rem; padding: 0 0.7rem; font-size: 0.75rem; font-weight: 500;
+    color: var(--cc-text-muted); cursor: pointer; transition: color .15s;
+  }
+  .cc-tab:hover { color: var(--cc-text); }
+  .cc-tab[aria-selected="true"] { color: var(--cc-text); }
+  .cc-tab[aria-selected="true"]::after {
+    content: ""; position: absolute; left: 0.6rem; right: 0.6rem; bottom: -1px; height: 2px;
+    border-radius: 2px; background: var(--tab-color, var(--cc-accent));
+  }
+
+  .cc-menu {
+    position: absolute; z-index: 50; min-width: 13rem; padding: 0.3rem;
+    background: var(--cc-surface-el); border: 1px solid var(--cc-border); border-radius: 12px;
+    box-shadow: 0 16px 40px rgba(0,0,0,.45);
+  }
+  .cc-menu-item {
+    display: flex; width: 100%; align-items: center; gap: 0.6rem;
+    padding: 0.5rem 0.6rem; border-radius: 8px; text-align: left;
+    font-size: 0.8125rem; color: var(--cc-text-sec); cursor: pointer;
+  }
+  .cc-menu-item:hover { background: var(--cc-surface-hover); color: var(--cc-text); }
+}
+
+/* ── Remote cursors (y-monaco) — colours + name labels injected at runtime ── */
+.yRemoteSelection { background-color: rgba(139,156,255,0.20); }
 .yRemoteSelectionHead {
   position: absolute; height: 100%; box-sizing: border-box;
   border-left: 2px solid var(--cc-accent);
 }
 .yRemoteSelectionHead::after {
   position: absolute; top: -1.15em; left: -2px;
-  padding: 0 4px; border-radius: 3px 3px 3px 0;
-  font: 600 10px/1.4 var(--cc-font-ui); color: #0D1117;
+  padding: 0 5px; border-radius: 4px 4px 4px 0;
+  font: 600 10px/1.45 var(--cc-font-ui); color: #0B0E14;
   white-space: nowrap; pointer-events: none; z-index: 10;
 }
 
-/* Line authorship: colour bar in the gutter (colours injected per author at runtime). */
-.cc-author-bar { width: 3px !important; margin-left: 3px; border-radius: 1px; opacity: 0.9; }
-.cc-author-inline { font-style: italic; font-size: 0.85em; opacity: 0.7; }
+/* ── Line authorship gutter (colours injected per author at runtime) ── */
+.cc-author-bar { width: 3px !important; margin-left: 3px; border-radius: 2px; opacity: 0.9; }
+.cc-author-inline { font-style: italic; font-size: 0.85em; opacity: 0.75; }
 
-/* Output Panel resize handle */
+/* ── Misc ── */
 .output-panel-resize-handle { cursor: row-resize; user-select: none; }
-.output-panel-resize-handle:hover { background-color: var(--cc-accent); opacity: 0.4; }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #252C35; border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(57,197,207,0.25); }
+::-webkit-scrollbar-thumb { background: #232938; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #2E3548; }
 
-/* Chat animation */
 .chat-message-enter { animation: slideUp 0.18s ease-out; }
 @keyframes slideUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
-/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
 
-/* Mono utility */
 .font-code { font-family: var(--cc-font-mono); }

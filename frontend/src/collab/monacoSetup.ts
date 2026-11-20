@@ -38,4 +38,29 @@ self.MonacoEnvironment = {
 
 loader.config({ monaco });
 
+// Editor theme matching the app palette (index.css tokens).
+monaco.editor.defineTheme('collab-dark', {
+  base: 'vs-dark',
+  inherit: true,
+  rules: [
+    { token: 'comment', foreground: '6C7386', fontStyle: 'italic' },
+    { token: 'keyword', foreground: 'A78BFA' },
+    { token: 'string', foreground: '34D399' },
+    { token: 'number', foreground: 'FBBF24' },
+    { token: 'type', foreground: '22D3EE' },
+  ],
+  colors: {
+    'editor.background': '#0E1219',
+    'editor.lineHighlightBackground': '#151A23',
+    'editor.lineHighlightBorder': '#00000000',
+    'editorLineNumber.foreground': '#3A4154',
+    'editorLineNumber.activeForeground': '#A3AABB',
+    'editor.selectionBackground': '#8B9CFF40',
+    'editorCursor.foreground': '#8B9CFF',
+    'editorIndentGuide.background1': '#1C2230',
+    'editorGutter.background': '#0E1219',
+    'scrollbarSlider.background': '#23293880',
+  },
+});
+
 export { monaco };

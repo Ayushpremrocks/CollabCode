@@ -3,6 +3,13 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useSignIn, useSignUp } from '@clerk/clerk-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { safeRedirect } from '../../utils/redirect';
+import { Icon, Logo, type IconName } from '../ui/icons';
+
+const AUTH_FEATURES: { icon: IconName; color: string; title: string; text: string }[] = [
+  { icon: 'users', color: 'var(--cc-cyan)', title: 'Edit together, live', text: 'Named cursors and conflict-free syncing.' },
+  { icon: 'tag', color: 'var(--cc-accent)', title: 'See who wrote each line', text: 'Every line is colour-coded by its author.' },
+  { icon: 'bug', color: 'var(--cc-pink)', title: 'AI fixes, verified', text: 'Fixes are re-run before you approve them.' },
+];
 import { motion, useReducedMotion } from 'motion/react';
 
 interface AuthPageLayoutProps {
@@ -468,28 +475,13 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
       <header
         className="w-full border-b shrink-0 px-4 sm:px-8 py-3.5 flex items-center justify-between"
         style={{
-          background: 'rgba(13, 17, 23, 0.95)',
+          background: 'var(--cc-surface)',
           borderColor: 'var(--cc-border)',
         }}
       >
         <Link to="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-90">
-          <div
-            className="w-7 h-7 rounded flex items-center justify-center shrink-0"
-            style={{ background: 'var(--cc-accent-dim)', border: '1px solid var(--cc-accent)' }}
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              style={{ color: 'var(--cc-accent)' }}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-            </svg>
-          </div>
-          <span className="font-semibold text-base tracking-tight" style={{ color: 'var(--cc-text)' }}>
-            CodeCollab
-          </span>
+          <Logo size={28} />
+          <span className="font-semibold text-base tracking-tight" style={{ color: 'var(--cc-text)' }}>CollabCode</span>
         </Link>
 
         <div className="flex items-center gap-3 text-xs">
@@ -516,84 +508,31 @@ export function AuthPageLayout({ initialMode }: AuthPageLayoutProps) {
           >
             {/* Header & Tagline */}
             <div>
-              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded border text-[11px] font-mono mb-4"
-                style={{
-                  background: 'var(--cc-surface)',
-                  borderColor: 'var(--cc-border)',
-                  color: 'var(--cc-accent)',
-                }}
-              >
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--cc-accent)' }} />
-                REAL-TIME COLLABORATIVE IDE
-              </div>
-
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight uppercase font-mono">
-                <span style={{ color: 'var(--cc-text)' }}>Code Together.</span>
+              <span className="cc-chip mb-4">
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--cc-success)' }} />
+                Real-time collaborative editor
+              </span>
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight leading-tight">
+                <span style={{ color: 'var(--cc-text)' }}>Write code together.</span>
                 <br />
-                <span style={{ color: 'var(--cc-accent)' }}>Debug Together.</span>
+                <span className="cc-gradient-text">Fix it with AI.</span>
               </h1>
-
               <p className="mt-3 text-sm sm:text-base leading-relaxed" style={{ color: 'var(--cc-text-sec)' }}>
-                A real-time collaborative coding workspace with an AI agent that executes, verifies, and helps fix your code.
+                Share a room, edit live with named cursors, and let an AI agent verify fixes before you accept them.
               </p>
             </div>
 
-            {/* 3 Concise Capabilities */}
-            <div className="space-y-3.5 pt-1">
-              {/* Capability 1 */}
-              <div className="flex items-start gap-3">
-                <div
-                  className="w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5"
-                  style={{ background: 'var(--cc-accent-dim)', color: 'var(--cc-accent)' }}
-                >
-                  <span className="text-xs font-mono font-bold">●</span>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wider font-mono" style={{ color: 'var(--cc-text)' }}>
-                    Real-Time Collaboration
+            <ul className="space-y-3">
+              {AUTH_FEATURES.map((f) => (
+                <li key={f.title} className="flex items-start gap-3">
+                  <span className="cc-tile w-8 h-8" style={{ ['--tile' as string]: f.color }}><Icon name={f.icon} size={15} /></span>
+                  <div>
+                    <div className="text-sm font-medium" style={{ color: 'var(--cc-text)' }}>{f.title}</div>
+                    <div className="text-xs mt-0.5" style={{ color: 'var(--cc-text-muted)' }}>{f.text}</div>
                   </div>
-                  <div className="text-xs mt-0.5" style={{ color: 'var(--cc-text-muted)' }}>
-                    Work together in the same coding workspace with zero merge conflicts.
-                  </div>
-                </div>
-              </div>
-
-              {/* Capability 2 */}
-              <div className="flex items-start gap-3">
-                <div
-                  className="w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5"
-                  style={{ background: 'var(--cc-warning-dim)', color: 'var(--cc-warning)' }}
-                >
-                  <span className="text-xs font-mono font-bold">●</span>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wider font-mono" style={{ color: 'var(--cc-text)' }}>
-                    AI Debugging
-                  </div>
-                  <div className="text-xs mt-0.5" style={{ color: 'var(--cc-text-muted)' }}>
-                    Analyze real execution failures and propose fixes based on actual runtime diagnostics.
-                  </div>
-                </div>
-              </div>
-
-              {/* Capability 3 */}
-              <div className="flex items-start gap-3">
-                <div
-                  className="w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5"
-                  style={{ background: 'var(--cc-success-dim)', color: 'var(--cc-success)' }}
-                >
-                  <span className="text-xs font-mono font-bold">●</span>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wider font-mono" style={{ color: 'var(--cc-text)' }}>
-                    Verified Execution
-                  </div>
-                  <div className="text-xs mt-0.5" style={{ color: 'var(--cc-text-muted)' }}>
-                    AI-generated fixes are executed and verified in sandbox before human review.
-                  </div>
-                </div>
-              </div>
-            </div>
+                </li>
+              ))}
+            </ul>
 
             {/* Subtle Animated Product Visual */}
             <div className="pt-2">

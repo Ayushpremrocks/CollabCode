@@ -169,7 +169,7 @@ export function HistoryModal({ roomCode, canRestore, onClose, onRestore }: Histo
                   height="100%"
                   language={monacoLang}
                   value={previewCode}
-                  theme="vs-dark"
+                  theme="collab-dark"
                   options={{
                     readOnly: true,
                     minimap: { enabled: false },

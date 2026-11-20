@@ -1,6 +1,6 @@
 # CollabCode
 
-> Real-time collaborative code editor with an integrated autonomous AI debugging agent powered by Google Gemini and execution-feedback verification.
+> A real-time collaborative code editor with an AI debugging agent that **runs your code, fixes it with Google Gemini, and verifies the fix before you approve it.**
 
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -8,352 +8,291 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.3.5-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
 [![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
-[![Google Gemini](https://img.shields.io/badge/AI-Google_Gemini_3.6_Flash-8E75B2?logo=googlegemini&logoColor=white)](https://ai.google.dev/)
+[![Google Gemini](https://img.shields.io/badge/AI-Google_Gemini-8E75B2?logo=googlegemini&logoColor=white)](https://ai.google.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-4169E1?logo=postgresql&logoColor=white)](https://neon.tech/)
 [![Clerk](https://img.shields.io/badge/Auth-Clerk-6C47FF?logo=clerk&logoColor=white)](https://clerk.com/)
 
+## 🌐 Live Demo
+
+| | |
+|---|---|
+| **App** | [collab-code-application.vercel.app](https://collab-code-application.vercel.app/) (Vercel) |
+| **API & WebSockets** | [collabcode-lsor.onrender.com](https://collabcode-lsor.onrender.com) (Render) |
+
+> **First visit may be slow.** The backend runs on Render's free tier, which sleeps after ~15 minutes without traffic and can take **up to 2 minutes** to wake. The app starts waking it as soon as the page loads and shows a "server is waking up" notice; after that everything is instant.
+
 ---
 
-## 🌐 Live Deployments
+## Why CollabCode?
 
-- **Web Application (Frontend):** [https://collab-code-application.vercel.app](https://collab-code-application.vercel.app/) *(Hosted on Vercel)*
-- **API & WebSocket Server (Backend):** [https://collabcode-lsor.onrender.com](https://collabcode-lsor.onrender.com) *(Hosted on Render)*
+When code breaks during pair programming, people usually copy it into a chatbot, paste the answer back, and hope it compiles. Chatbots never see the real error and never test their answer.
 
-> **Note on Free-Tier Hosting:** The backend is deployed on Render's free tier. If the service has been idle for more than 15 minutes, initial spin-up may take 50–70 seconds. Subsequent requests and WebSocket sessions are instantaneous.
+CollabCode puts everything in one room:
 
----
-
-## Overview
-
-Modern software development is inherently collaborative, yet debugging collaboratively remains fragmented. When a program fails during a pair-programming session, developers typically switch between external AI chatbots, local terminal outputs, and manual code pasting. Chatbots frequently generate plausible-looking code that fails to compile or introduces regressions because they operate without real execution context.
-
-**CollabCode** solves this by unifying:
-1. **Real-time collaborative code editing** with conflict-free replication (CRDTs).
-2. **AI assistance** directly in the editor workspace.
-3. **Autonomous debugging** with a closed-loop execution feedback cycle.
-4. **Verified execution** before suggestions are presented to developers.
-5. **Human approval** as an uncompromised safety gate before shared code is modified.
+1. **Real-time collaborative editing** — conflict-free (CRDT) syncing, named cursors, and line authorship.
+2. **Code execution** for 14 languages, right in the editor.
+3. **An AI debug agent** that works from the *actual* compiler/runtime error and re-runs its fix to prove it works.
+4. **Human approval** — the AI never changes shared code until someone clicks Approve.
 
 ---
 
 ## Features
 
-### Collaborative Editor
-- **Real-Time Multi-User Editing:** Powered by **Yjs** CRDTs (`y-monaco`, `y-protocols`). Multiple developers can concurrently edit the same document with zero merge conflicts or lost keystrokes.
-- **Room-Based Collaboration:** Instant 8-character shareable room codes. Rooms persist across disconnects and support up to 48 hours of activity.
-- **Live Cursors & Presence:** Every collaborator's cursor and selection is shown with their name and a per-user colour (Yjs awareness). The same colour is used in the participant list.
-- **Line Authorship:** A coloured bar in the gutter shows who wrote each line; hover it for the author (and each contributor's share). "Show Line Authors" adds blame-style name labels. Authorship is stored in the shared document itself, so it syncs live and survives reloads.
-- **Host Controls:** *Host-only editing* (everyone else can watch but not edit — enforced by the server, not just the UI), *room lock* (people who never joined cannot join), and room deletion.
-- **In-Editor Chat:** Messaging panel; the last 100 messages are kept so a refresh or late joiner sees the conversation.
-- **Version History:** Snapshots are saved whenever the document changes (at most once a minute, and when the last person leaves). Restoring a snapshot is applied as a live edit, so everyone sees it immediately.
+### Collaborate
+- **Rooms with shareable codes** — create a room, share its 8-character code, and edit the same file together. Rooms expire after 48 hours without activity.
+- **Live cursors** — every collaborator's cursor and selection is shown with their name and colour.
+- **Line authorship** — a coloured bar beside each line shows who wrote it; hover for the author (and each contributor's share), or turn on **Line authors** to label every block. Authorship is part of the shared document, so it syncs live and survives reloads.
+- **Chat** — built into the room; recent messages are kept, so a refresh or late joiner still sees the conversation.
+- **Version history** — snapshots are saved automatically when the code changes. Restoring one updates the code for everyone instantly.
 
-### AI Agent
-- **In-Context Q&A:** Ask questions about your code, explain complex algorithms, and analyze logic errors directly in the editor.
-- **Editor Context Injection:** One-click pre-fill inserts active editor code and language into the prompt buffer.
-- **Authenticated Backend Routing:** All prompts pass through `/api/agent/test` on the Spring Boot backend authenticated via Clerk JWTs. The Gemini API key is never exposed to the client.
+### Host controls
+- **Host-only editing** — collaborators can watch but not type (enforced by the server, not just the UI). Useful for interviews and demos.
+- **Room lock** — stops new people from joining; people already in the room can still come back.
+- **Delete room** — disconnects everyone and removes all history.
 
-### AI Debug Agent
-The flagship agentic capability of CollabCode. Rather than offering static code completions, the AI Debug Agent executes an autonomous, multi-step diagnostic and repair loop:
+### Run code
+Runs via [Wandbox](https://wandbox.org)'s sandboxed compilers, with your own program input (stdin) and clear output, compiler and error sections.
 
-1. **Execute Original Code:** Submits the current editor buffer to `CodeExecutionService` (via Wandbox) to capture real runtime behavior.
-2. **Observe Compiler / Runtime Failure:** Collects actual `stderr`, compile errors, and exit codes.
-3. **Send Code + Failure Diagnostics to Gemini:** Constructs a structured diagnostic prompt containing the exact failure output, source code, language, and optional user hints.
-4. **Generate Proposed Fix:** Gemini (`gemini-3.6-flash`) reasons about the root cause and generates a complete, corrected code implementation.
-5. **Execute the Proposed Fix:** The agent submits the proposed fix to the execution sandbox to run it against the compiler/runtime.
-6. **Inspect Verification Result:** Analyzes execution status (checks for `Accepted` statusId 3).
-7. **Iterate When Necessary:** If the fix still fails, updates the error context with the new compiler diagnostics and retries (up to the configured maximum of 3 iterations).
-8. **Present Verified Result to User:** Displays the agent's step-by-step reasoning, initial failure logs, verification output, and a side-by-side original vs. proposed fix comparison.
-9. **Apply Change Only After Human Approval:** The patch is **never** applied automatically. The user reviews the verified diff and clicks **Approve & Apply** to atomically update the shared Yjs document, or **Reject** to keep the editor untouched.
+| Runnable (14) | Editor only |
+|---|---|
+| JavaScript, TypeScript, Python, Java, C++, C, C#, Go, Rust, Swift, Ruby, PHP, SQL (SQLite), Bash | Kotlin, HTML, CSS, JSON, Markdown, YAML |
 
-### Code Execution
-- Integrated via `CodeExecutionService` using Wandbox's keyless compilation engine.
-- Supports 14 programming languages with output inspection (`stdout`, `stderr`, compiler logs, and status mapping).
+### AI
+- **Ask AI** — ask Gemini about your code (explain it, find bugs, write tests) with one click to attach the current file.
+- **Debug agent** — the flagship feature; see below.
 
-### Authentication
-- Seamless authentication via **Clerk** (supporting Google OAuth and email sign-in).
-- Backend requests are secured with Spring Security OAuth2 Resource Server, decoding and validating Clerk JWTs against Clerk's remote JWKS endpoint (`CLERK_JWKS_URI`).
+---
 
-### Persistence
-- Hosted on **Neon Serverless PostgreSQL**.
-- Manages users, room metadata, participant presence, and periodic binary document snapshots (`BYTEA`) for rollback and session restoration.
+## The AI Debug Agent
 
-### AI Reasoning Engine
-- Powered by **Google Gemini** using the official `com.google.genai:google-genai:1.68.0` SDK.
-- Configured with verified model **`gemini-3.6-flash`** for low-latency reasoning and robust code generation.
-- The `GEMINI_API_KEY` is strictly managed backend-only and never logged or leaked.
+Instead of guessing, the agent runs a closed loop against the real compiler:
+
+```
+Debug ─► Run code ─► Read the real error ─► Gemini proposes a full fix
+                                                     │
+              ┌──────── still failing? retry (max 3) ┤
+              ▼                                      ▼
+        new error fed back                 Run the fix in the sandbox
+                                                     │
+                                                passes ✓
+                                                     ▼
+                         Show reasoning, both runs and Original/Fix views
+                                                     │
+                                     Approve ──► applied for everyone
+                                     Reject  ──► code untouched
+```
+
+- **It observes reality** — the prompt contains the actual compiler output, stderr and exit status.
+- **It tests its own work** — every proposed fix is executed before you see it; results are marked *Fix verified* or *Best attempt*.
+- **It iterates** — if a fix still fails, the new error is fed back (up to 3 rounds).
+- **It knows when to stop** — code that already runs cleanly isn't "fixed" unless you describe what's wrong, and languages that can't run are refused up front.
+- **You stay in control** — on approval only the changed region is replaced, so collaborators' edits elsewhere are kept. If the code changed while the agent was working, you're warned before applying.
 
 ---
 
 ## Architecture
 
 ```text
-Browser Client (React 19 + Monaco + Yjs)
+Browser — React 19 · Monaco · Yjs                        (Vercel)
   │
-  ├──► Raw Binary WebSocket (/ws/yjs/{roomCode}) ──► YjsWebSocketHandler → YjsRoom (update log + replay)
-  │                                                        │
-  │                                                        ▼
-  │                                                   Neon PostgreSQL (Snapshots)
+  ├─ Binary WebSocket  /ws/yjs/{room}  ─► YjsWebSocketHandler ─► YjsRoom (update log + replay)
+  │                                                                  └─► PostgreSQL snapshots
+  ├─ STOMP WebSocket   /ws/stomp       ─► chat · presence · language · room events
   │
-  ├──► STOMP over WebSocket (/ws/stomp) ───────────► StompWebSocketConfig (Chat & Presence)
-  │
-  └──► HTTPS REST API (/api/*) ────────────────────► Spring Boot Backend
-                                                           │
-                                                           ├──► Clerk JWKS (Token Validation)
-                                                           │
-                                                           ├──► Neon PostgreSQL (JPA Entities)
-                                                           │
-                                                           ├──► GeminiService (gemini-3.6-flash)
-                                                           │
-                                                           └──► CodeExecutionService
-                                                                      │
-                                                                      ▼
-                                                                 Wandbox API (Sandbox Execution)
+  └─ REST  /api/*  (Clerk JWT)         ─► Spring Boot 3 · Java 21            (Render, Docker)
+                                           ├─ Clerk JWKS (token validation)
+                                           ├─ PostgreSQL / Neon (users, rooms, snapshots)
+                                           ├─ GeminiService ─► Google Gemini
+                                           └─ CodeExecutionService ─► Wandbox
 ```
 
-### Real-time sync design
+### How real-time sync works
 
-The server cannot merge Yjs updates (there is no maintained Java Yjs), so each room keeps
-an in-memory **base state + update log** (`YjsRoom`):
+The server can't merge Yjs documents itself (there's no maintained Java Yjs), so each room keeps an in-memory **base state + log of every update** (`YjsRoom`):
 
-1. A client that connects receives the base and then **every** logged update, so it always ends up
-   with the complete document. (Previously joiners only got a ~30 s old snapshot; later edits that
-   depended on missing ones stayed "pending" in Yjs, which is why text appeared on the wrong line.)
-2. Clients periodically send their full state with an **ack** = number of updates they had applied.
-   The server knows exactly which log entries that state contains and compacts only those.
-3. On (re)connect a client also pushes its full state, so edits made while offline — or lost by a
-   backend restart — are never dropped.
-4. Changed documents are persisted at most once a minute, when the last user leaves, and on shutdown.
+1. **Joining** — a client receives the base and then every logged update, so it always has the complete, up-to-date document.
+2. **Compaction** — clients periodically send their full state with an *ack* (how many updates they had applied). The server knows exactly which log entries that state contains and drops only those, so no edit is ever lost.
+3. **Reconnecting** — a client re-sends its full state, recovering edits made while offline or lost in a server restart.
+4. **Saving** — changed documents are written to PostgreSQL at most once a minute, when the last person leaves, and on shutdown.
+5. **Host-only mode** — the server rejects updates from anyone but the host while it's on.
 
-Frame format: see `backend/.../websocket/yjs/YjsProtocol.java` and `frontend/src/services/collaborationService.ts`.
+Cursors and names travel over the same socket using Yjs *awareness*. The frame format is documented in [`YjsProtocol.java`](backend/src/main/java/com/collabcode/websocket/yjs/YjsProtocol.java) and [`collaborationService.ts`](frontend/src/services/collaborationService.ts). A deeper write-up is in [DEEP_DIVE.md](DEEP_DIVE.md).
 
----
+### REST API
 
-## Agentic Debugging Workflow
+All endpoints except `/api/health` require `Authorization: Bearer <Clerk session token>`.
 
-```
-[ User clicks "Debug with AI Agent" ]
-                 │
-                 ▼
-      [ Step 1: Run Original Code ]
-                 │
-                 ▼
-      [ Step 2: Observe Failure ] ──► (Compiler error / Runtime exception)
-                 │
-                 ▼
-      [ Step 3: Prompt Gemini ] ────► (Code + Compiler diagnostics + User hint)
-                 │
-                 ▼
-      [ Step 4: Extract Proposed Fix ]
-                 │
-                 ▼
-      [ Step 5: Execute Proposed Fix in Sandbox ]
-                 │
-                 ▼
-      [ Step 6: Verify Execution Result ]
-           /                   \
-      (Still Failing)      (Status: Accepted)
-         │                         │
-         ▼                         ▼
-   [ Step 7: Iterate ]     [ Step 8: Present Verified Result ]
-   (Up to 3 rounds)                │
-                                   ▼
-                       [ Step 9: Human Approval Gate ]
-                                /             \
-                       [ User Approves ]    [ User Rejects ]
-                              │                    │
-                              ▼                    ▼
-                      Atomically update       Keep original
-                      shared Yjs document     code unchanged
-```
-
-### Why This is Genuinely Agentic
-
-Unlike simple AI chatbots or autocomplete extensions:
-- **It observes reality:** The agent inspects actual compiler errors and program exit codes produced by the Wandbox runtime, not assumptions.
-- **It tests its own work:** Before presenting a solution to the user, the agent executes the proposed code in an isolated sandbox.
-- **It iterates autonomously:** If iteration 1 fails to resolve the compiler error, the agent incorporates the new error output and attempts an alternative approach.
-- **Human in the loop:** Autonomy is bounded by human authority. Shared collaborative code is only modified when a developer explicitly reviews and approves the verified patch.
+| Method & path | Purpose |
+|---|---|
+| `GET /api/health` | Public liveness check (used to wake the server) |
+| `GET /api/users/me` | The signed-in user's profile |
+| `POST /api/rooms` · `POST /api/rooms/join` | Create a room · join by code |
+| `GET /api/rooms` · `GET /api/rooms/{code}` | Your rooms · one room (members only) |
+| `DELETE /api/rooms/{code}` | Delete (host only) |
+| `PATCH /api/rooms/{code}/lock` · `PATCH /api/rooms/{code}/read-only` | Lock room · host-only editing (host only) |
+| `GET /api/rooms/{code}/snapshots[/{id}]` | Version history (members only) |
+| `GET /api/rooms/{code}/chat` | Recent chat messages (members only) |
+| `POST /api/rooms/execute` | Run code (rate-limited) |
+| `POST /api/agent/test` · `POST /api/agent/debug` | Ask AI · debug agent (rate-limited) |
 
 ---
 
 ## Tech Stack
 
-### Frontend
-- **Framework & Language:** React 19, TypeScript
-- **Bundler:** Vite 8
-- **Styling:** Tailwind CSS v4
-- **Editor:** Monaco Editor (`@monaco-editor/react`)
-- **CRDT Synchronization:** Yjs, `y-monaco`, `y-protocols`, `lib0`
-- **Real-Time Messaging:** `@stomp/stompjs`
-- **Authentication Client:** `@clerk/clerk-react`
-- **HTTP Client:** Axios (with Clerk token interceptor)
-- **Routing:** React Router DOM v7
-
-### Backend
-- **Platform & Language:** Spring Boot 3.3.5, Java 21
-- **Security:** Spring Security 6 (OAuth2 Resource Server validating Clerk JWTs via JWKS)
-- **AI SDK:** `com.google.genai:google-genai:1.68.0`
-- **AI Model:** `gemini-3.6-flash`
-- **Real-Time Communication:** Spring WebSocket (Binary Handler + STOMP Broker)
-- **Data Access:** Spring Data JPA, Hibernate 6
-- **Database:** PostgreSQL (Neon Serverless)
-- **Code Execution:** Wandbox REST API
-
-### Hosting & Infrastructure
-- **Frontend SPA:** Vercel
-- **Backend Container:** Render (Docker containerized)
-- **Database:** Neon
+| Layer | Technologies |
+|---|---|
+| **Frontend** | React 19, TypeScript, Vite 8, Tailwind CSS v4, Monaco Editor, Yjs (`y-monaco`, `y-protocols`), `@stomp/stompjs`, Clerk React, Axios, React Router 7 |
+| **Backend** | Spring Boot 3.3, Java 21, Spring Security (OAuth2 resource server), Spring WebSocket (binary + STOMP), Spring Data JPA, Google Gen AI SDK |
+| **Data & services** | PostgreSQL (Neon), Clerk (auth), Google Gemini (AI), Wandbox (code execution) |
+| **Testing** | JUnit 5, Mockito, Spring MockMvc, Vitest |
+| **Hosting** | Vercel (frontend), Render with Docker (backend), Neon (database) |
 
 ---
 
-## Local Development
+## Project Structure
+
+```text
+backend/src/main/java/com/collabcode/
+├── config/          Security, CORS, WebSocket endpoints, rate limiting
+├── controller/      REST controllers + global error handling
+├── service/         Rooms, documents, users, presence, chat, Gemini, code execution, debug agent
+├── websocket/       Yjs socket handler, STOMP auth & handlers
+│   └── yjs/         YjsRoom (update log + compaction), YjsRoomManager, wire protocol
+├── model/ · repository/ · dto/ · event/ · exception/
+backend/src/main/resources/   application.yml, schema.sql
+
+frontend/src/
+├── pages/           Landing, Login/Register, Dashboard, Editor
+├── components/      Editor, toolbar, side panels (people, chat, AI, debug), history, UI kit
+├── collab/          Yjs session, line authorship, text edits, Monaco setup
+├── services/        REST client, Yjs sync provider, room/agent/execution APIs
+├── contexts/ · hooks/ · types/ · utils/
+frontend/e2e/        Cross-stack tests against the real Java relay
+```
+
+---
+
+## Running Locally
 
 ### Prerequisites
-- JDK 21+
-- Apache Maven 3.9+
-- Node.js 18+ and npm
-- PostgreSQL database (local or Neon)
-- Clerk account with publishable key & JWKS URI
-- Google AI Studio API key (Gemini)
+- **JDK 21** and **Maven 3.9+**
+- **Node.js 22+** and npm
+- A **PostgreSQL** database (local or a free [Neon](https://neon.tech) project)
+- A **[Clerk](https://clerk.com)** application (publishable key + JWKS URL)
+- A **[Google AI Studio](https://aistudio.google.com/app/apikey)** API key
 
----
+### 1. Backend
 
-### Backend Setup
+```bash
+cd backend
+cp .env.example .env      # then fill in the values below
+mvn spring-boot:run       # → http://localhost:8080
+```
 
-1. Navigate to `backend`:
-   ```bash
-   cd backend
-   ```
-2. Copy the environment template:
-   ```bash
-   cp .env.example .env
-   ```
-3. Populate `backend/.env` with your credentials:
-   ```env
-   SPRING_DATASOURCE_URL=jdbc:postgresql://your-neon-host.neon.tech/neondb?sslmode=require
-   SPRING_DATASOURCE_USERNAME=your_db_username
-   SPRING_DATASOURCE_PASSWORD=your_db_password
-   CLERK_JWKS_URI=https://your-clerk-app.clerk.accounts.dev/.well-known/jwks.json
-   ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174
-   SPRING_SQL_INIT_MODE=always
-   GEMINI_API_KEY=your_gemini_api_key
-   ```
-4. Run the Spring Boot application:
-   ```bash
-   mvn spring-boot:run
-   ```
-   The backend will start at `http://localhost:8080`.
+```env
+SPRING_DATASOURCE_URL=jdbc:postgresql://your-host/neondb?sslmode=require
+SPRING_DATASOURCE_USERNAME=your_db_user
+SPRING_DATASOURCE_PASSWORD=your_db_password
+CLERK_JWKS_URI=https://your-app.clerk.accounts.dev/.well-known/jwks.json
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174
+SPRING_SQL_INIT_MODE=always
+GEMINI_API_KEY=your_gemini_api_key
+```
 
----
+The database schema is created and migrated automatically on startup (`schema.sql`).
 
-### Frontend Setup
+### 2. Frontend
 
-1. Navigate to `frontend`:
-   ```bash
-   cd frontend
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Verify `frontend/.env.development`:
-   ```env
-   VITE_CLERK_PUBLISHABLE_KEY=pk_test_your_clerk_key
-   VITE_API_BASE_URL=http://localhost:8080/api
-   VITE_WS_BASE_URL=ws://localhost:8080
-   ```
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
-5. Open `http://localhost:5173` in your browser.
+Create `frontend/.env.development` (it is git-ignored):
+
+```env
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_your_clerk_key
+VITE_API_BASE_URL=http://localhost:8080/api
+VITE_WS_BASE_URL=ws://localhost:8080
+```
+
+```bash
+cd frontend
+npm install
+npm run dev               # → http://localhost:5173
+```
 
 ---
 
 ## Environment Variables
 
-### Frontend (`frontend/.env.*`)
+### Frontend (`frontend/.env.development` / `.env.production`, or Vercel settings)
 
 | Variable | Description |
 |---|---|
-| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk public publishable key for user authentication |
-| `VITE_API_BASE_URL` | Base URL for REST API endpoints |
-| `VITE_WS_BASE_URL` | Base URL for WebSocket connections (`ws://` or `wss://`) |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk publishable key |
+| `VITE_API_BASE_URL` | REST base URL, e.g. `https://your-backend/api` |
+| `VITE_WS_BASE_URL` | WebSocket base URL, e.g. `wss://your-backend` |
 
-### Backend (`backend/.env` / Render Config)
+### Backend (`backend/.env`, or Render settings)
 
-| Variable | Description |
-|---|---|
-| `SPRING_DATASOURCE_URL` | PostgreSQL JDBC connection URL |
-| `SPRING_DATASOURCE_USERNAME` | Database username |
-| `SPRING_DATASOURCE_PASSWORD` | Database password |
-| `CLERK_JWKS_URI` | Clerk `.well-known/jwks.json` endpoint for JWT validation |
-| `GEMINI_API_KEY` | Google Gemini API key (backend-only, never logged or committed) |
-| `GEMINI_MODEL` | *(optional)* Gemini model id, default `gemini-3.6-flash` |
-| `YJS_FLUSH_INTERVAL_MS` | *(optional)* How often changed documents are saved, default `60000` |
-| `RATE_LIMIT_EXECUTE_PER_MINUTE` / `RATE_LIMIT_AGENT_PER_MINUTE` | *(optional)* Per-user limits, default `20` / `6` |
-| `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins |
-| `SPRING_SQL_INIT_MODE` | SQL schema initialization mode (`always` or `never`) |
+| Variable | Required | Description |
+|---|---|---|
+| `SPRING_DATASOURCE_URL` | ✓ | PostgreSQL JDBC URL |
+| `SPRING_DATASOURCE_USERNAME` | ✓ | Database user |
+| `SPRING_DATASOURCE_PASSWORD` | ✓ | Database password |
+| `CLERK_JWKS_URI` | ✓ | Clerk JWKS URL — must be the **same Clerk instance** as the frontend key |
+| `ALLOWED_ORIGINS` | ✓ | Comma-separated frontend origins (CORS and both WebSockets) |
+| `GEMINI_API_KEY` | ✓ for AI | Gemini key — backend only, never sent to the browser |
+| `SPRING_SQL_INIT_MODE` | | `always` (default) runs `schema.sql` on startup |
+| `GEMINI_MODEL` | | Gemini model id (default `gemini-3.6-flash`) |
+| `YJS_FLUSH_INTERVAL_MS` | | How often changed documents are saved (default `60000`) |
+| `RATE_LIMIT_EXECUTE_PER_MINUTE` | | Code runs per user per minute (default `20`) |
+| `RATE_LIMIT_AGENT_PER_MINUTE` | | AI requests per user per minute (default `6`) |
 
 ---
 
 ## Testing
 
 ```bash
-# Backend unit + integration tests (no database or network needed)
+# Backend: unit, controller and full-application tests (no database or network needed)
 cd backend && mvn test
 
-# Cross-stack end-to-end: starts the real Java Yjs relay and drives it with the
-# frontend's real CollaborationProvider (needs Node + frontend node_modules)
+# End-to-end: starts the real Java sync server and drives it with the
+# frontend's real sync client (needs Node 22+ and frontend dependencies installed)
 cd backend && mvn test -Dtest=YjsRelayE2ETest -De2e=true
 
-# Frontend unit tests, type-check, lint
+# Frontend: unit tests, type-check, lint
 cd frontend && npm test && npx tsc -b && npm run lint
 ```
 
-The end-to-end suite covers concurrent edits on different lines (with line shifts and a late
-joiner), offline edits, a backend restart, host-only mode, expired-token retry, non-members,
-documents larger than 8 KB, cursor removal and persistence.
+The end-to-end suite covers simultaneous edits on different lines (including line shifts and a late joiner), offline edits, a server restart, host-only mode, expired-token retry, non-members, large documents, cursor cleanup and persistence. The sync engine also has a randomized stress test that replays thousands of interleaved edits, joins and disconnects.
 
 ---
 
-## Deployment Checklist (Vercel + Render + Clerk)
+## Deployment Notes (Vercel + Render + Clerk)
 
-- **Same Clerk instance on both sides.** The instance encoded in `VITE_CLERK_PUBLISHABLE_KEY` (Vercel)
-  must be the one whose JWKS URL is in `CLERK_JWKS_URI` (Render). A mismatch makes every API call a 401.
-- **`ALLOWED_ORIGINS`** on Render must contain the exact Vercel origin (no trailing slash). It is used
-  for CORS *and* both WebSocket endpoints.
-- **Vercel env vars** are baked in at build time — redeploy after changing them.
-- **Clerk development keys (`pk_test_…`)** work on `*.vercel.app` but show a "development mode" badge and
-  have user limits. A Clerk *production* instance requires a custom domain you own.
-- **Optional:** add `username`/`email` claims to the session token (Clerk Dashboard → Sessions →
-  Customize session token: `{"username": "{{user.username}}", "email": "{{user.primary_email_address}}"}`)
-  so new users get readable usernames instead of `user_xxxxxxx`.
-- **Render free tier** sleeps after ~15 min idle and can take 1–2 minutes to wake. The frontend pings
-  `/api/health` on load, shows a "server is waking up" notice, and retries requests whose token expired
-  while waiting.
+- **Use the same Clerk instance on both sides.** The instance in `VITE_CLERK_PUBLISHABLE_KEY` (Vercel) must match `CLERK_JWKS_URI` (Render), or every API call returns 401.
+- **`ALLOWED_ORIGINS`** on Render must contain your exact Vercel URL (no trailing slash).
+- **Vercel variables are baked in at build time** — redeploy after changing them.
+- **Clerk development keys** (`pk_test_…`) work on `*.vercel.app` but show a "development mode" badge and have user limits. A Clerk production instance needs a custom domain.
+- **Readable usernames (optional):** in Clerk Dashboard → Sessions → *Customize session token*, add `{"username": "{{user.username}}", "email": "{{user.primary_email_address}}"}`. The app always displays people's real names either way.
+- **Render free tier** sleeps when idle; the app wakes it on page load and retries requests whose sign-in token expired while it was starting.
 
 ---
 
 ## Security
 
-- **Backend-Only AI Secrets:** The `GEMINI_API_KEY` is loaded exclusively by Spring Boot via environment variables. It has no frontend equivalent (`no VITE_* var`), is never sent to the browser, and is excluded from logs.
-- **Git-Ignored Secrets:** `backend/.env` is tracked in `.gitignore` and never committed to version control. `backend/.env.example` provides a sanitized template.
-- **Authenticated Endpoints:** All `/api/agent/*` and `/api/rooms/*` endpoints require a valid Clerk JWT verified via cryptographic JWKS public keys.
-- **Room Membership Everywhere:** Room details, snapshots, chat history, the Yjs socket and every STOMP subscription/message require the user to have joined the room. Host actions (delete, lock, host-only editing) are checked before anything is broadcast.
-- **Rate Limits:** Code execution and AI endpoints are limited per user.
-- **Atomic Document Updates:** Patches applied from the agent occur through transactional Yjs operations (`yText.doc.transact`), preventing race conditions.
+- **Secrets stay on the server** — the Gemini key and database credentials are backend-only environment variables; `backend/.env` is git-ignored.
+- **Every request is authenticated** — Clerk JWTs are verified against Clerk's public keys (JWKS) for REST and both WebSockets.
+- **Room membership is enforced everywhere** — room details, history, chat, the sync socket and every chat/presence subscription require having joined the room. Host actions are checked before anything is broadcast.
+- **Host-only editing is server-side** — edits from non-hosts are rejected by the sync server.
+- **Abuse limits** — code execution and AI endpoints are rate-limited per user.
+- **Safe AI changes** — fixes are applied only after human approval, as one minimal edit.
 
 ---
 
 ## Demo Walkthrough
 
-Follow these steps to observe the end-to-end agentic workflow:
-
-1. **Sign In & Create Room:** Log in using Google via Clerk and create a new collaborative room from the dashboard.
-2. **Invite a Collaborator:** Open the room URL in a second browser window or share the 8-character code to observe real-time dual-cursor sync.
-3. **Select Language:** Switch language to **C++** using the language selector.
-4. **Introduce a Bug:** Paste the following syntax-broken code into the editor:
+1. **Sign in** (Google or email) and click **Create** on the dashboard.
+2. **Invite someone** — copy the room code from the toolbar, or open the room in a second browser window. You'll see each other's named cursors.
+3. **Pick C++** from the language menu in the toolbar.
+4. **Paste broken code:**
    ```cpp
    #include <iostream>
 
@@ -362,34 +301,32 @@ Follow these steps to observe the end-to-end agentic workflow:
        return 0;
    }
    ```
-5. **Run Code:** Click **Run Code** in Room Controls. Observe the output panel report a compilation error: `expected ';' before 'return'`.
-6. **Trigger AI Debug Agent:** In the right sidebar, expand the **AI Debug Agent** panel. Click **Debug with AI Agent**.
-7. **Observe Agent Execution:** The agent runs the code, captures the error, consults Gemini, extracts the patch, and re-executes the corrected code in Wandbox.
-8. **Inspect Verified Result:** Review the agent's explanation, the initial failure report, the verified sandbox execution (`Accepted`, exit code 0, output: `"Hello, World!"`), and toggle between Original and Fix views.
-9. **Approve the Fix:** Click **Approve & Apply**.
-10. **Observe Real-Time Sync:** The missing semicolon is applied atomically to the editor, immediately propagating to all collaborators via Yjs.
+5. **Click Run.** The Output tab shows a *Compilation Error*: `expected ';' before 'return'`.
+6. **Open the Debug tab** in the sidebar and click **Debug with AI Agent**.
+7. **Review the result** — Gemini's reasoning, the failing run, the verified run of the fix (*Accepted*, output `Hello, World!`), and the Original/Fix views.
+8. **Click Approve & Apply.** The semicolon appears in everyone's editor at once.
+9. **Toggle line authors** (tag icon in the toolbar) to see who wrote each line.
 
 ---
 
 ## Limitations
 
-- **Language Execution Constraints:** Code execution is powered by Wandbox's public compiler runner, supporting 14 languages without persistent disk storage or multi-file project trees.
-- **Quota & Availability:** Gemini API response times depend on Google AI service availability and API tier quotas.
-- **Bounded Iteration Limit:** The agent loop is constrained to a maximum of 3 iterations (`MAX_ITERATIONS = 3`) to prevent infinite execution cycles and conserve API quota.
-- **Single Document Buffer:** Collaboration currently operates on a single Monaco editor buffer per room.
-- **Single Backend Instance:** Live room state (update log, presence, chat history, rate limits) is in memory, so the backend must run as one instance. Chat history does not survive a backend restart.
+- **Single file per room** — no multi-file projects or persistent disk.
+- **Execution limits** — code runs on Wandbox's public compilers (14 languages, time-limited).
+- **Agent rounds** — at most 3 fix attempts per run, to bound time and API quota.
+- **Gemini availability** — response times and quotas depend on your Google AI plan.
+- **Single backend instance** — live room state (sync log, presence, chat, rate limits) lives in memory, so the backend runs as one instance, and chat history resets when it restarts.
 
 ---
 
-## Hackathon Positioning
+## Positioning
 
 > "CollabCode uses an execution-feedback loop where an AI agent observes real program failures, proposes fixes, executes those fixes, evaluates the result, and iterates before presenting a verified change for human approval."
 
-CollabCode demonstrates that agentic AI is fundamentally different from code generation. By closing the loop between reasoning and real-world execution feedback while keeping the human firmly in control, CollabCode provides a reliable, trustworthy AI pair programmer for collaborative teams.
+Agentic AI is different from code generation: by closing the loop between reasoning and real execution — while keeping a human in control — CollabCode makes an AI pair programmer you can actually trust in a shared codebase.
 
 ---
 
 ## 👤 Author
 
-**Ayush Prem**
-- GitHub: [@Ayushpremrocks](https://github.com/Ayushpremrocks)
+**Ayush Prem** — GitHub: [@Ayushpremrocks](https://github.com/Ayushpremrocks)
